@@ -12,6 +12,21 @@ export type RunningReconcileEvidence = {
   canApplyStaleFallback?: boolean;
 };
 
+export type PersistedStaleSubtaskCandidate = {
+  childID: string;
+  parentID: string;
+  messageID: string;
+  title?: string;
+  summary?: string;
+  agentName?: string;
+};
+
+export type PersistedStaleSubtaskResolution = {
+  status: "done" | "error";
+  endedAt?: string;
+  targetSessionID?: string;
+};
+
 export function summarizeSessionMessages(messages: unknown[]): {
   completedAt?: string;
   evidenceAt?: string;
@@ -99,6 +114,27 @@ export function hasRecentMessageActivity(input: {
   );
 }
 
+export function canSafelyCloseNoTargetPersistedCandidate(input: {
+  nowMs: number;
+  staleThresholdMs: number;
+  startedMs: number;
+  updatedMs: number;
+  latestMessageActivityAtMs?: number;
+}): boolean {
+  if (input.staleThresholdMs <= 0) return false;
+  if (
+    input.startedMs < input.staleThresholdMs ||
+    input.updatedMs < input.staleThresholdMs
+  ) {
+    return false;
+  }
+  return !hasRecentMessageActivity({
+    nowMs: input.nowMs,
+    latestMessageActivityAtMs: input.latestMessageActivityAtMs,
+    staleThresholdMs: input.staleThresholdMs,
+  });
+}
+
 export function shouldApplyStaleRunningFallback(input: {
   staleThresholdMs: number;
   evidence: RunningReconcileEvidence;
@@ -146,10 +182,140 @@ export function capCandidates<T>(candidates: T[], maxCandidates: number): T[] {
     : candidates.slice(0, maxCandidates);
 }
 
+export function resolvePersistedStaleSubtaskFromParentMessages(input: {
+  candidate: PersistedStaleSubtaskCandidate;
+  messages: unknown[];
+}): PersistedStaleSubtaskResolution | undefined {
+  type RankedMatch = PersistedStaleSubtaskResolution & { score: number };
+  const matches: RankedMatch[] = [];
+
+  for (const rawMessage of input.messages) {
+    const message = asRecord(rawMessage);
+    const info = asRecord(message?.info);
+    if (!info || info.role !== "assistant") continue;
+
+    const assistantParentID = asString(
+      info.parentID ?? message?.parentID ?? message?.parentMessageID,
+    );
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+
+    for (const rawPart of parts) {
+      const part = asRecord(rawPart);
+      if (!part || part.type !== "tool" || part.tool !== "task") continue;
+
+      const state = asRecord(part.state);
+      const rawStatus = asString(state?.status);
+      const status =
+        rawStatus === "completed"
+          ? "done"
+          : rawStatus === "error"
+            ? "error"
+            : undefined;
+      if (!status) continue;
+
+      const metadata = asRecord(state?.metadata);
+      const targetSessionID =
+        sessionIDFromUnknown(metadata?.sessionId) ??
+        sessionIDFromUnknown(metadata?.sessionID) ??
+        parseTaskSessionIDFromOutput(state?.output);
+
+      const partTitle =
+        asString(state?.input && asRecord(state.input)?.description) ??
+        asString(state?.title) ??
+        asString(part.description);
+      const partSummary =
+        asString(state?.input && asRecord(state.input)?.prompt) ??
+        asString(state?.description);
+      const partAgent =
+        asString(state?.input && asRecord(state.input)?.subagent_type) ??
+        asString(part.agent);
+
+      const parentMessageMatch =
+        assistantParentID !== undefined &&
+        assistantParentID === input.candidate.messageID;
+      const titleMatch = sameDisplayText(partTitle, input.candidate.title);
+      const summaryMatch = sameDisplayText(partSummary, input.candidate.summary);
+      const agentMatch = sameDisplayText(partAgent, input.candidate.agentName);
+
+      const metadataCompositeMatch =
+        summaryMatch || (titleMatch && agentMatch && !!input.candidate.summary);
+      if (!parentMessageMatch && !metadataCompositeMatch) {
+        continue;
+      }
+
+      const score =
+        (parentMessageMatch ? 100 : 0) +
+        (summaryMatch ? 40 : 0) +
+        (titleMatch ? 20 : 0) +
+        (agentMatch ? 10 : 0);
+
+      const endedAt =
+        timestampFromUnknown(
+          asRecord(state?.time)?.end ??
+            asRecord(state?.time)?.completed ??
+            asRecord(state?.time)?.updated,
+        ) ??
+        timestampFromUnknown(
+          asRecord(info?.time)?.completed ??
+            asRecord(info?.time)?.updated ??
+            asRecord(info?.time)?.created,
+        );
+
+      matches.push({
+        status,
+        endedAt,
+        targetSessionID,
+        score,
+      });
+    }
+  }
+
+  if (matches.length === 0) return undefined;
+  if (matches.length === 1) {
+    const [only] = matches;
+    return {
+      status: only.status,
+      endedAt: only.endedAt,
+      targetSessionID: only.targetSessionID,
+    };
+  }
+
+  const ranked = [...matches].sort((left, right) => right.score - left.score);
+  const [best, second] = ranked;
+  if (!best || (second && best.score === second.score)) return undefined;
+  return {
+    status: best.status,
+    endedAt: best.endedAt,
+    targetSessionID: best.targetSessionID,
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function sameDisplayText(left?: string, right?: string): boolean {
+  if (!left || !right) return false;
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function sessionIDFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.startsWith("ses_")
+    ? value
+    : undefined;
+}
+
+function parseTaskSessionIDFromOutput(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = value.match(/\b(?:task_id\s*:\s*)?(ses_[A-Za-z0-9_-]+)\b/i);
+  if (!match) return undefined;
+  return match[1];
 }
 
 function messageTimeMillis(info: Record<string, unknown> | undefined): number {
