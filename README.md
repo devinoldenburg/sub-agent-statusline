@@ -8,31 +8,6 @@ See what your subagents are doing without losing track of them: running, done, f
 
 This package works as a **TUI sidebar plugin** for OpenCode.
 
-> [!WARNING]
-> Package-based installation through `tui.json` is currently affected by an OpenCode/OpenTUI loading issue.
->
-> Loading the plugin as a dependency, for example `"plugin": ["opencode-subagent-statusline"]`, may fail while OpenCode resolves TUI dependencies from its package cache.
->
-> Until OpenCode ships a fix, clone this repository, build it locally, and point your TUI config directly to `dist/tui.js`:
->
-> ```sh
-> git clone https://github.com/Joaquinvesapa/sub-agent-statusline.git
-> cd sub-agent-statusline
-> pnpm install
-> pnpm build
-> ```
->
-> ```json
-> {
->   "$schema": "https://opencode.ai/tui.json",
->   "plugin": [
->     "/absolute/path/to/sub-agent-statusline/dist/tui.js"
->   ]
-> }
-> ```
->
-> If you do not want to run the plugin locally, please wait for an OpenCode update that fixes dependency-based TUI plugin loading.
-
 ---
 
 ## Why?
@@ -97,15 +72,15 @@ Run `Subagents: Focus sidebar list` from the OpenCode command palette, or press
 `Alt+B`, to focus the subagent sidebar list without using the mouse. List
 navigation shortcuts are handled only while the sidebar list is focused.
 
-| Shortcut | Action |
-| --- | --- |
-| `Alt+B` | Toggle focus between the subagent sidebar list and the prompt. |
-| `j` / `ArrowDown` | Move selection to the next visible subagent. |
-| `k` / `ArrowUp` | Move selection to the previous visible subagent. |
-| `Enter` | Open the selected subagent session. |
-| `h` / `ArrowLeft` | Collapse the subagent section. |
-| `l` / `ArrowRight` | Expand the subagent section. |
-| `Esc` | Leave list focus mode and return to the prompt. |
+| Shortcut           | Action                                                         |
+| ------------------ | -------------------------------------------------------------- |
+| `Alt+B`            | Toggle focus between the subagent sidebar list and the prompt. |
+| `j` / `ArrowDown`  | Move selection to the next visible subagent.                   |
+| `k` / `ArrowUp`    | Move selection to the previous visible subagent.               |
+| `Enter`            | Open the selected subagent session.                            |
+| `h` / `ArrowLeft`  | Collapse the subagent section.                                 |
+| `l` / `ArrowRight` | Expand the subagent section.                                   |
+| `Esc`              | Leave list focus mode and return to the prompt.                |
 
 Opening a selected session is a no-op when there is no visible or navigable
 subagent.
@@ -131,9 +106,7 @@ Test the local TUI build by pointing OpenCode directly at `dist/tui.js`:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": [
-    "/absolute/path/to/sub-agent-statusline/dist/tui.js"
-  ]
+  "plugin": ["/absolute/path/to/sub-agent-statusline/dist/tui.js"]
 }
 ```
 
