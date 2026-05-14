@@ -87,6 +87,18 @@ subagent.
 
 ---
 
+## Documentation
+
+For a deeper explanation of how the plugin works, see the structured docs:
+
+- [English documentation](docs/en/00-index.md)
+- [Documentación en español](docs/es/00-indice.md)
+
+They cover installation, architecture, event flow, state/counters, rendering,
+TUI behavior, advanced configuration, development/testing, and troubleshooting.
+
+---
+
 ## Local development
 
 Install dependencies with lifecycle scripts disabled by default:
