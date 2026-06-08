@@ -128,8 +128,14 @@ interface SidebarListFocusRegistration {
   isListFocusModeActive: () => boolean;
 }
 
+interface SidebarCompletedHistoryRegistration {
+  toggleCompletedHistory: () => boolean;
+}
+
 const sidebarScrollRegistrations = new Set<SidebarScrollRegistration>();
 const sidebarListFocusRegistrations = new Set<SidebarListFocusRegistration>();
+const sidebarCompletedHistoryRegistrations =
+  new Set<SidebarCompletedHistoryRegistration>();
 
 function focusVisibleSidebarSubagentList(preferredChildID?: string): boolean {
   for (const registration of [...sidebarListFocusRegistrations].reverse()) {
@@ -149,6 +155,15 @@ function isAnySidebarSubagentListFocused(): boolean {
   return [...sidebarListFocusRegistrations].some((registration) =>
     registration.isListFocusModeActive(),
   );
+}
+
+function toggleVisibleSidebarCompletedHistory(): boolean {
+  for (const registration of [
+    ...sidebarCompletedHistoryRegistrations,
+  ].reverse()) {
+    if (registration.toggleCompletedHistory()) return true;
+  }
+  return false;
 }
 
 function maxScrollTop(scrollbox: ScrollBoxRenderable): number {
@@ -938,12 +953,17 @@ function SidebarSubagents(props: {
   sidebarWidth?: () => number | undefined;
   theme: TuiThemeCurrent;
 }) {
+  const [showCompletedHistory, setShowCompletedHistory] = createSignal(false);
+  const completedHistoryOptions = () => ({
+    showCompletedHistory: showCompletedHistory(),
+  });
   const children = createMemo(() =>
     visibleSubagentWorkItems(
       Object.values(props.state().children).filter(
         (child) => child.parentID === props.sessionID,
       ),
       props.nowMs(),
+      completedHistoryOptions(),
     ).sort(byPriority),
   );
 
@@ -953,12 +973,19 @@ function SidebarSubagents(props: {
         (child) => child.parentID !== props.sessionID,
       ),
       props.nowMs(),
+      completedHistoryOptions(),
     ).sort(byPriority),
   );
 
+  const visibleChildren = createMemo(() => {
+    const ownChildren = children();
+    if (ownChildren.length > 0) return ownChildren;
+    return otherChildren();
+  });
+
   const counts = createMemo(() => {
     const result = { running: 0, done: 0, error: 0 };
-    for (const child of children()) {
+    for (const child of visibleChildren()) {
       if (child.status === "running") result.running += 1;
       if (child.status === "done") result.done += 1;
       if (child.status === "error") result.error += 1;
@@ -966,12 +993,6 @@ function SidebarSubagents(props: {
     return result;
   });
   const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
-
-  const visibleChildren = createMemo(() => {
-    const ownChildren = children();
-    if (ownChildren.length > 0) return ownChildren;
-    return otherChildren();
-  });
 
   const showingOtherSessions = createMemo(
     () => children().length === 0 && otherChildren().length > 0,
@@ -1047,9 +1068,17 @@ function SidebarSubagents(props: {
     isListFocusModeActive: () => listFocusModeActive(),
   };
   sidebarListFocusRegistrations.add(focusRegistration);
+  const completedHistoryRegistration: SidebarCompletedHistoryRegistration = {
+    toggleCompletedHistory: () => {
+      setShowCompletedHistory((current) => !current);
+      return true;
+    },
+  };
+  sidebarCompletedHistoryRegistrations.add(completedHistoryRegistration);
   onCleanup(() => {
     sidebarScrollRegistrations.delete(scrollRegistration);
     sidebarListFocusRegistrations.delete(focusRegistration);
+    sidebarCompletedHistoryRegistrations.delete(completedHistoryRegistration);
     if (restoreScrollTimeout) clearTimeout(restoreScrollTimeout);
   });
 
@@ -1149,6 +1178,10 @@ function SidebarSubagents(props: {
     navigateToSessionTarget(props.api, selectedTargetSessionID());
   };
 
+  const toggleCompletedHistory = (): void => {
+    completedHistoryRegistration.toggleCompletedHistory();
+  };
+
   createEffect(() => {
     selectedChildID();
     listHeight();
@@ -1170,6 +1203,8 @@ function SidebarSubagents(props: {
       if (props.expanded()) props.onSetExpanded(false);
     } else if (name === "l" || name === "right" || name === "arrowright") {
       if (!props.expanded()) props.onSetExpanded(true);
+    } else if (name === "c") {
+      toggleCompletedHistory();
     } else if (name === "escape" || name === "esc") {
       focusRegistration.blurList();
       props.onReturnFocus();
@@ -1390,7 +1425,12 @@ function SidebarSubagents(props: {
       <text fg={props.theme.textMuted}> · </text>
       <text fg={props.theme.error}>{`✕ ${counts().error} err`}</text>
       <text fg={props.theme.textMuted}> · </text>
-      <text fg={props.theme.text}>{`Σ ${totalExecuted()}`}</text>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI text supports mouse targets. */}
+      <text
+        fg={showCompletedHistory() ? props.theme.accent : props.theme.text}
+        selectable={false}
+        onMouseDown={toggleCompletedHistory}
+      >{`Σ ${totalExecuted()}`}</text>
     </box>
   );
 
@@ -2052,11 +2092,23 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     }, 0);
   };
 
+  const toggleSidebarCompletedHistory = (): void => {
+    api.ui.dialog.clear();
+    setSubagentsSectionEnabled(true);
+    setSubagentsExpanded(true);
+    api.kv.set(SUBAGENTS_SECTION_ENABLED_KV_KEY, true);
+    api.kv.set(SUBAGENTS_EXPANDED_KV_KEY, true);
+    setTimeout(() => {
+      toggleVisibleSidebarCompletedHistory();
+    }, 0);
+  };
+
   const commandDispose = registerSubagentCommands({
     api,
     sectionEnabled: subagentsSectionEnabled,
     toggleSection: setSubagentsSectionEnabledPreference,
     focusSidebarList: toggleSidebarListFocus,
+    toggleCompletedHistory: toggleSidebarCompletedHistory,
   });
 
   const clearHydrateRetryTimeout = (sessionID: string): void => {

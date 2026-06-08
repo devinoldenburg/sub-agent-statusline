@@ -149,6 +149,10 @@ export function byPriority(a: ChildSessionState, b: ChildSessionState): number {
 
 const RECENT_DONE_VISIBLE_MS = 10 * 60 * 1000;
 
+interface VisibleSubagentWorkItemsOptions {
+  showCompletedHistory?: boolean;
+}
+
 function normalizeWorkItemTitle(value: string): string {
   return value
     .toLowerCase()
@@ -235,8 +239,6 @@ export function collapseSubagentWorkItems(
   const syntheticChildren: ChildSessionState[] = [];
   const syntheticByParentID = new Map<string, ChildSessionState[]>();
   const sessionCandidatesByParentID = new Map<string, ChildSessionState[]>();
-  const hiddenTargetSessionIDs = new Set<string>();
-  const hiddenMessageKeys = new Set<string>();
 
   for (const child of children) {
     const isSynthetic = child.source === "tool" || child.source === "subtask";
@@ -249,12 +251,6 @@ export function collapseSubagentWorkItems(
         syntheticByParentID.set(child.parentID, [child]);
       }
 
-      if (child.targetSessionID) {
-        hiddenTargetSessionIDs.add(child.targetSessionID);
-      }
-      if (child.messageID) {
-        hiddenMessageKeys.add(messageKey(child.parentID, child.messageID));
-      }
     }
 
     if (child.source === "session" || child.id.startsWith("ses_")) {
@@ -268,7 +264,6 @@ export function collapseSubagentWorkItems(
   }
 
   const sessionBySyntheticID = new Map<string, ChildSessionState>();
-  const hiddenMatchedSessionIDs = new Set<string>();
   const hiddenSyntheticToolIDs = new Set<string>();
 
   for (const synthetic of syntheticChildren) {
@@ -280,9 +275,6 @@ export function collapseSubagentWorkItems(
         continue;
       }
       bestSession = betterPriority(bestSession, candidate);
-      if (candidate.source === "session") {
-        hiddenMatchedSessionIDs.add(candidate.id);
-      }
     }
     if (bestSession) {
       sessionBySyntheticID.set(synthetic.id, bestSession);
@@ -293,7 +285,9 @@ export function collapseSubagentWorkItems(
     for (const child of siblings) {
       if (child.source !== "tool") continue;
       if (isGenericToolWrapper(child)) {
-        if (siblings.length > 1) hiddenSyntheticToolIDs.add(child.id);
+        if (siblings.some((sibling) => !isGenericToolWrapper(sibling))) {
+          hiddenSyntheticToolIDs.add(child.id);
+        }
         continue;
       }
 
@@ -304,6 +298,23 @@ export function collapseSubagentWorkItems(
           break;
         }
       }
+    }
+  }
+
+  const hiddenTargetSessionIDs = new Set<string>();
+  const hiddenMessageKeys = new Set<string>();
+  const hiddenMatchedSessionIDs = new Set<string>();
+  for (const synthetic of syntheticChildren) {
+    if (hiddenSyntheticToolIDs.has(synthetic.id)) continue;
+    if (synthetic.targetSessionID) {
+      hiddenTargetSessionIDs.add(synthetic.targetSessionID);
+    }
+    if (synthetic.messageID) {
+      hiddenMessageKeys.add(messageKey(synthetic.parentID, synthetic.messageID));
+    }
+    const matchedSession = sessionBySyntheticID.get(synthetic.id);
+    if (matchedSession?.source === "session") {
+      hiddenMatchedSessionIDs.add(matchedSession.id);
     }
   }
 
@@ -341,10 +352,12 @@ export function isVisibleWorkItem(
 export function visibleSubagentWorkItems(
   children: ChildSessionState[],
   nowMs = Date.now(),
+  options: VisibleSubagentWorkItemsOptions = {},
 ): ChildSessionState[] {
-  const visible = collapseSubagentWorkItems(children).filter((child) =>
-    isVisibleWorkItem(child, nowMs),
-  );
+  const collapsed = collapseSubagentWorkItems(children);
+  if (options.showCompletedHistory) return collapsed;
+
+  const visible = collapsed.filter((child) => isVisibleWorkItem(child, nowMs));
   const hasRunning = visible.some((child) => child.status === "running");
   const activeMessageIDs = new Set(
     visible

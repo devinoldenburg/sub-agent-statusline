@@ -98,6 +98,7 @@ Cuando la lista está enfocada, los atajos de navegación se aplican a la lista.
 | `k`          | Selecciona el subagente anterior.            |
 | `ArrowUp`    | Selecciona el subagente anterior.            |
 | `Enter`      | Abre la sesión seleccionada si es navegable. |
+| `c`          | Alterna completed history para filas `done` retenidas. |
 | `h`          | Colapsa la sección.                          |
 | `ArrowLeft`  | Colapsa la sección.                          |
 | `l`          | Expande la sección.                          |
@@ -112,6 +113,7 @@ El plugin registra comandos para la command palette de OpenCode.
 | ----------------------------------- | ------------------------------ |
 | `Subagents: Focus sidebar list`     | Enfoca la lista de subagentes. |
 | `Subagents: Toggle sidebar section` | Activa o desactiva la sección. |
+| `Subagents: Toggle completed history` | Alterna filas completadas retenidas en la sidebar. |
 
 Internamente, el plugin registra ambas APIs cuando están disponibles:
 `keymap.registerLayer` mantiene el atajo `Alt+B`, y `command.register` mantiene
@@ -136,6 +138,11 @@ Esto es intencional: navegar requiere una sesión real de OpenCode.
 
 La sección puede expandirse o colapsarse.
 
+Hacer click en `Σ`, presionar `c` con la lista enfocada o ejecutar
+`Subagents: Toggle completed history` alterna completed history. Esto muestra
+filas `done` viejas retenidas y filas `done` retenidas que no están relacionadas
+con el trabajo activo. El toggle es transitorio y no se guarda en `api.kv`.
+
 El plugin guarda preferencias en `api.kv` de OpenCode:
 
 | Preferencia                  | Uso                                     |
@@ -144,6 +151,10 @@ El plugin guarda preferencias en `api.kv` de OpenCode:
 | `subagents.sidebar.enabled`  | Recuerda si la sección está habilitada. |
 
 Estas preferencias pertenecen al entorno TUI de OpenCode, no al archivo `state.json` del runtime plugin.
+
+Completed history está limitado por la retención de estado: las filas terminales
+se conservan hasta 3 días con un límite de 1.500 filas. Las filas ya podadas del
+estado no se restauran.
 
 ## Scroll y selección
 
@@ -250,9 +261,10 @@ Para validar la TUI después de cambios:
 4. Ejecutar una delegación/subagente.
 5. Verificar que aparece en la sidebar.
 6. Probar `Alt+B`.
-7. Probar `j/k`, flechas y `Esc`.
-8. Si hay sesión navegable, probar `Enter`.
-9. Confirmar que completions recientes aparecen y luego no ensucian la vista.
+7. Probar `j/k`, flechas, `c` y `Esc`.
+8. Hacer click en `Σ` y verificar que completed history alterna.
+9. Si hay sesión navegable, probar `Enter`.
+10. Confirmar que completions recientes aparecen y luego no ensucian la vista por defecto.
 
 ## Archivos relacionados
 
