@@ -69,6 +69,7 @@ import {
 } from "./state.js";
 import { registerSubagentCommands } from "./tui-commands.js";
 import { t } from "./i18n.js";
+import { currentSymbols } from "./symbols.js";
 
 const TUI_PLUGIN_ID = "subagent-statusline.tui";
 const ELAPSED_TICK_MS = 1000;
@@ -86,10 +87,6 @@ const RUNNING_RECONCILE_INITIAL_BACKOFF_MS = 15_000;
 const RUNNING_RECONCILE_MAX_BACKOFF_MS = 5 * 60_000;
 const RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS = 60_000;
 const RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS = 5 * 60_000;
-const CLOCK_ICON = "";
-const TOKEN_ICON = "";
-const SIDEBAR_ARROW_EXPANDED = "▼";
-const SIDEBAR_ARROW_COLLAPSED = "▶";
 const SUBAGENTS_EXPANDED_KV_KEY = "subagents.sidebar.expanded";
 const SUBAGENTS_SECTION_ENABLED_KV_KEY = "subagents.sidebar.enabled";
 const SUBAGENTS_MAX_VISIBLE_ROWS = 5;
@@ -432,6 +429,14 @@ function safeRead<Value>(read: () => Value): Value | undefined {
   }
 }
 
+function safeCall(call: () => void): void {
+  try {
+    call();
+  } catch {
+    // OpenCode TUI APIs can differ by version; integration calls are best-effort.
+  }
+}
+
 function messageIDOf(message: unknown): string | undefined {
   const record = asRecord(message);
   if (!record) return undefined;
@@ -446,17 +451,17 @@ function pushSessionCandidates(
 ): void {
   if (!sessionID) return;
 
-  const status = safeRead(() => api.state.session.status(sessionID));
+  const status = safeRead(() => api.state?.session?.status?.(sessionID));
   if (status) candidates.push(status);
 
-  const messages = safeRead(() => api.state.session.messages(sessionID));
+  const messages = safeRead(() => api.state?.session?.messages?.(sessionID));
   if (!messages) return;
 
   candidates.push(messages);
   for (const message of messages) {
     const messageID = messageIDOf(message);
     if (!messageID) continue;
-    const parts = safeRead(() => api.state.part(messageID));
+    const parts = safeRead(() => api.state?.part?.(messageID));
     if (parts) candidates.push(parts);
   }
 }
@@ -470,13 +475,11 @@ function hydrateChildTokensFromTuiState(
   pushSessionCandidates(api, child.id, candidates);
 
   if (child.messageID) {
-    const parentParts = safeRead(() =>
-      api.state.part(child.messageID as string),
-    );
+    const parentParts = safeRead(() => api.state?.part?.(child.messageID as string));
     if (parentParts) candidates.push(parentParts);
 
     const parentMessages = safeRead(() =>
-      api.state.session.messages(child.parentID),
+      api.state?.session?.messages?.(child.parentID),
     );
     const parentMessage = parentMessages?.find(
       (message) => messageIDOf(message) === child.messageID,
@@ -571,9 +574,10 @@ function elapsedMs(child: ChildSessionState, nowMs: number): number {
 }
 
 function taskStatusMarker(status: ChildSessionState["status"]): string {
-  if (status === "done") return "[✓]";
-  if (status === "error") return "[x]";
-  return "[ ]";
+  const symbols = currentSymbols();
+  if (status === "done") return symbols.done;
+  if (status === "error") return symbols.error;
+  return symbols.running;
 }
 
 function statusColor(
@@ -664,7 +668,7 @@ function navigateToSessionTarget(
 
   // Verified against local typings in `@opencode-ai/plugin/dist/tui.d.ts`:
   // api.route.navigate(name: string, params?: Record<string, unknown>)
-  api.route.navigate("session", { sessionID: targetSessionID });
+  safeCall(() => api.route?.navigate?.("session", { sessionID: targetSessionID }));
 }
 
 function toFinitePositiveInt(value: unknown): number | undefined {
@@ -703,10 +707,11 @@ function resolveSidebarWidth(ctx: unknown): number | undefined {
 }
 
 function ellipsize(value: string, maxChars: number): string {
+  const ellipsis = currentSymbols().ellipsis;
   if (maxChars <= 0) return "";
   if (value.length <= maxChars) return value;
-  if (maxChars <= 1) return "…";
-  return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
+  if (maxChars <= ellipsis.length) return ellipsis.slice(0, maxChars);
+  return `${value.slice(0, Math.max(0, maxChars - ellipsis.length))}${ellipsis}`;
 }
 
 function splitParentheticalTitle(title: string): {
@@ -938,6 +943,7 @@ function SidebarSubagents(props: {
   sidebarWidth?: () => number | undefined;
   theme: TuiThemeCurrent;
 }) {
+  const symbols = currentSymbols();
   const children = createMemo(() =>
     visibleSubagentWorkItems(
       Object.values(props.state().children).filter(
@@ -1318,7 +1324,7 @@ function SidebarSubagents(props: {
                 <text
                   fg={selected() ? props.theme.accent : props.theme.textMuted}
                 >
-                  {selected() ? "›" : " "}
+                  {selected() ? symbols.selected : " "}
                 </text>
                 <text fg={statusColor(status(), props.theme)}>
                   {taskStatusMarker(status())}
@@ -1335,7 +1341,7 @@ function SidebarSubagents(props: {
               </box>
               <text
                 fg={emphasized() ? props.theme.text : props.theme.textMuted}
-              >{`    ↳ ${CLOCK_ICON} ${terminalLine().meta}`}</text>
+              >{`    ${symbols.branch} ${symbols.clock} ${terminalLine().meta}`}</text>
             </box>
           }
         >
@@ -1344,7 +1350,7 @@ function SidebarSubagents(props: {
               <text
                 fg={selected() ? props.theme.accent : props.theme.textMuted}
               >
-                {selected() ? "›" : " "}
+                {selected() ? symbols.selected : " "}
               </text>
               <text fg={statusColor(status(), props.theme)}>
                 {taskStatusMarker(status())}
@@ -1369,11 +1375,11 @@ function SidebarSubagents(props: {
             <box flexDirection="row" paddingLeft={4}>
               <text
                 fg={emphasized() ? props.theme.text : props.theme.textMuted}
-              >{`↳ ${CLOCK_ICON} ${line().elapsed}`}</text>
+              >{`${symbols.branch} ${symbols.clock} ${line().elapsed}`}</text>
               <Show when={line().meta.length > 0}>
                 <text
                   fg={emphasized() ? props.theme.text : props.theme.textMuted}
-                >{` ${TOKEN_ICON} ${line().meta}`}</text>
+                >{` ${symbols.tokens} ${line().meta}`}</text>
               </Show>
             </box>
           </box>
@@ -1384,13 +1390,13 @@ function SidebarSubagents(props: {
 
   const AggregateBar = () => (
     <box flexDirection="row" paddingRight={1}>
-      <text fg={props.theme.warning}>{`● ${counts().running} run`}</text>
-      <text fg={props.theme.textMuted}> · </text>
-      <text fg={props.theme.success}>{`✓ ${counts().done} done`}</text>
-      <text fg={props.theme.textMuted}> · </text>
-      <text fg={props.theme.error}>{`✕ ${counts().error} err`}</text>
-      <text fg={props.theme.textMuted}> · </text>
-      <text fg={props.theme.text}>{`Σ ${totalExecuted()}`}</text>
+      <text fg={props.theme.warning}>{`${symbols.running} ${counts().running} run`}</text>
+      <text fg={props.theme.textMuted}>{symbols.separator}</text>
+      <text fg={props.theme.success}>{`${symbols.done} ${counts().done} done`}</text>
+      <text fg={props.theme.textMuted}>{symbols.separator}</text>
+      <text fg={props.theme.error}>{`${symbols.error} ${counts().error} err`}</text>
+      <text fg={props.theme.textMuted}>{symbols.separator}</text>
+      <text fg={props.theme.text}>{`${symbols.total} ${totalExecuted()}`}</text>
     </box>
   );
 
@@ -1411,7 +1417,7 @@ function SidebarSubagents(props: {
           fg={props.theme.text}
           selectable={false}
           onMouseDown={props.onToggleExpanded}
-        >{`${props.expanded() ? SIDEBAR_ARROW_EXPANDED : SIDEBAR_ARROW_COLLAPSED} ${t("subagents")}`}</text>
+        >{`${props.expanded() ? symbols.expanded : symbols.collapsed} ${t("subagents")}`}</text>
         <Show when={PLUGIN_VERSION}>
           {(version: Accessor<string>) => (
             <text
@@ -1452,6 +1458,7 @@ function HomeBottomStatus(props: {
   state: () => StatuslineState;
   theme: TuiThemeCurrent;
 }) {
+  const symbols = currentSymbols();
   const counts = createMemo(() => {
     const result = { running: 0, done: 0, error: 0 };
     for (const child of visibleSubagentWorkItems(
@@ -1472,13 +1479,13 @@ function HomeBottomStatus(props: {
     <Show when={visible()}>
       <box paddingLeft={1} paddingRight={1}>
         <box flexDirection="row">
-          <text fg={props.theme.warning}>{`● ${counts().running}`}</text>
-          <text fg={props.theme.textMuted}> · </text>
-          <text fg={props.theme.success}>{`✓ ${counts().done}`}</text>
-          <text fg={props.theme.textMuted}> · </text>
-          <text fg={props.theme.error}>{`✕ ${counts().error}`}</text>
-          <text fg={props.theme.textMuted}> · </text>
-          <text fg={props.theme.text}>{`Σ ${totalExecuted()}`}</text>
+          <text fg={props.theme.warning}>{`${symbols.running} ${counts().running}`}</text>
+          <text fg={props.theme.textMuted}>{symbols.separator}</text>
+          <text fg={props.theme.success}>{`${symbols.done} ${counts().done}`}</text>
+          <text fg={props.theme.textMuted}>{symbols.separator}</text>
+          <text fg={props.theme.error}>{`${symbols.error} ${counts().error}`}</text>
+          <text fg={props.theme.textMuted}>{symbols.separator}</text>
+          <text fg={props.theme.text}>{`${symbols.total} ${totalExecuted()}`}</text>
         </box>
       </box>
     </Show>
@@ -1495,8 +1502,8 @@ async function hydratePreviousSubagents(
   if (!currentSessionID) return false;
 
   try {
-    const directory = api.state.path.directory;
-    const sessionClient = api.client.session;
+    const directory = api.state?.path?.directory ?? "";
+    const sessionClient = api.client?.session;
     let topLevelHydrationFailed = false;
     let statusHydrationFailed = false;
 
@@ -1746,9 +1753,11 @@ function timestampMillisFromUnknown(value: unknown): number | undefined {
 }
 
 function resolveRouteSessionID(api: TuiPluginApi): string | undefined {
-  return api.route.current.name === "session" &&
-    typeof api.route.current.params?.sessionID === "string"
-    ? api.route.current.params.sessionID
+  const current = api.route?.current;
+  const params = asRecord((current as { params?: unknown } | undefined)?.params);
+  return current?.name === "session" &&
+    typeof (params?.sessionID ?? params?.session_id) === "string"
+    ? ((params?.sessionID ?? params?.session_id) as string)
     : undefined;
 }
 
@@ -1858,7 +1867,7 @@ async function probeRunningEvidence(input: {
   let probeFailed = false;
 
   const directStatus = safeRead(() =>
-    input.api.state.session.status(input.targetSessionID),
+    input.api.state?.session?.status?.(input.targetSessionID),
   );
   if (directStatus === undefined) probeFailed = true;
   const statusFromState = deriveSessionChildStatus(directStatus);
@@ -1870,7 +1879,7 @@ async function probeRunningEvidence(input: {
   }
 
   const statusResp = await safeReadAsync(() =>
-    input.api.client.session.status({ directory: input.directory }),
+    input.api.client?.session?.status?.({ directory: input.directory }),
   );
   if (statusResp === undefined) probeFailed = true;
   const statuses = asRecord(statusResp?.data);
@@ -1889,7 +1898,7 @@ async function probeRunningEvidence(input: {
   }
 
   const messagesResp = await safeReadAsync(() =>
-    input.api.client.session.messages({
+    input.api.client?.session?.messages?.({
       sessionID: input.targetSessionID,
       directory: input.directory,
     }),
@@ -1963,10 +1972,13 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
   >(new Map());
   const [hydrateRetryTick, setHydrateRetryTick] = createSignal(0);
   const [subagentsExpanded, setSubagentsExpanded] = createSignal(
-    api.kv.get<boolean>(SUBAGENTS_EXPANDED_KV_KEY, true) !== false,
+    safeRead(() => api.kv?.get<boolean>(SUBAGENTS_EXPANDED_KV_KEY, true)) !==
+      false,
   );
   const [subagentsSectionEnabled, setSubagentsSectionEnabled] = createSignal(
-    api.kv.get<boolean>(SUBAGENTS_SECTION_ENABLED_KV_KEY, true) !== false,
+    safeRead(() =>
+      api.kv?.get<boolean>(SUBAGENTS_SECTION_ENABLED_KV_KEY, true),
+    ) !== false,
   );
   const hydrateRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   const runningReconcileBackoff = new Map<string, RunningReconcileCacheEntry>();
@@ -2012,31 +2024,31 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
 
   const setSubagentsExpandedPreference = (expanded: boolean): void => {
     setSubagentsExpanded(expanded);
-    api.kv.set(SUBAGENTS_EXPANDED_KV_KEY, expanded);
-    api.ui.toast({
+    safeCall(() => api.kv?.set?.(SUBAGENTS_EXPANDED_KV_KEY, expanded));
+    safeCall(() => api.ui?.toast?.({
       variant: "info",
       message: expanded ? "Subagent list expanded" : "Subagent list collapsed",
-    });
+    }));
   };
 
   const setSubagentsExpandedSilently = (expanded: boolean): void => {
     setSubagentsExpanded(expanded);
-    api.kv.set(SUBAGENTS_EXPANDED_KV_KEY, expanded);
+    safeCall(() => api.kv?.set?.(SUBAGENTS_EXPANDED_KV_KEY, expanded));
   };
 
   const setSubagentsSectionEnabledPreference = (enabled: boolean): void => {
     setSubagentsSectionEnabled(enabled);
-    api.kv.set(SUBAGENTS_SECTION_ENABLED_KV_KEY, enabled);
-    api.ui.toast({
+    safeCall(() => api.kv?.set?.(SUBAGENTS_SECTION_ENABLED_KV_KEY, enabled));
+    safeCall(() => api.ui?.toast?.({
       variant: "info",
       message: enabled
         ? "Subagent section enabled"
         : "Subagent section disabled",
-    });
+    }));
   };
 
   const toggleSidebarListFocus = (): void => {
-    api.ui.dialog.clear();
+    safeCall(() => api.ui?.dialog?.clear?.());
     if (isAnySidebarSubagentListFocused()) {
       blurVisibleSidebarSubagentList();
       focusActivePrompt();
@@ -2045,8 +2057,8 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
 
     setSubagentsSectionEnabled(true);
     setSubagentsExpanded(true);
-    api.kv.set(SUBAGENTS_SECTION_ENABLED_KV_KEY, true);
-    api.kv.set(SUBAGENTS_EXPANDED_KV_KEY, true);
+    safeCall(() => api.kv?.set?.(SUBAGENTS_SECTION_ENABLED_KV_KEY, true));
+    safeCall(() => api.kv?.set?.(SUBAGENTS_EXPANDED_KV_KEY, true));
     setTimeout(() => {
       focusVisibleSidebarSubagentList();
     }, 0);
@@ -2086,7 +2098,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
 
   createEffect(() => {
     hydrateRetryTick();
-    void api.route.current;
+    void api.route?.current;
     const routeSessionID = resolveRouteSessionID(api);
 
     if (previousRouteSessionID && previousRouteSessionID !== routeSessionID) {
@@ -2236,7 +2248,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
       const snapshot = cloneState(state());
       const nowMs = Date.now();
       const currentSessionID = resolveRouteSessionID(api);
-      const directory = api.state.path.directory;
+      const directory = api.state?.path?.directory ?? "";
 
       const selected = selectRunningReconcileCandidates({
         state: snapshot,
@@ -2273,7 +2285,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
           let parentMessages = parentMessagesCache.get(parentSessionID);
           if (parentMessages === undefined) {
             const parentMessagesResp = await safeReadAsync(() =>
-              api.client.session.messages({
+              api.client?.session?.messages?.({
                 sessionID: parentSessionID,
                 directory,
               }),
@@ -2478,17 +2490,21 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     });
   };
 
-  const disposers = [
-    api.event.on("session.created", applyEvent),
-    api.event.on("session.updated", applyEvent),
-    api.event.on("session.status", applyEvent),
-    api.event.on("session.idle", applyEvent),
-    api.event.on("session.error", applyEvent),
-    api.event.on("message.updated", applyEvent),
-    api.event.on("message.part.updated", applyEvent),
-  ];
+  const eventNames = [
+    "session.created",
+    "session.updated",
+    "session.status",
+    "session.idle",
+    "session.error",
+    "message.updated",
+    "message.part.updated",
+  ] as const;
+  const disposers = eventNames
+    .map((eventName) => safeRead(() => api.event?.on?.(eventName, applyEvent)))
+    .filter((dispose): dispose is () => void => typeof dispose === "function");
 
-  api.lifecycle.onDispose(() => {
+  const disposePlugin = () => {
+    if (disposed) return;
     disposed = true;
     clearInterval(tick);
     for (const timeout of hydrateRetryTimeouts.values()) {
@@ -2497,12 +2513,13 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     hydrateRetryTimeouts.clear();
     commandDispose();
     for (const dispose of disposers) {
-      dispose();
+      safeCall(dispose);
     }
     disposeRoot();
-  });
+  };
+  safeCall(() => api.lifecycle?.onDispose?.(disposePlugin));
 
-  api.slots.register({
+  safeCall(() => api.slots?.register?.({
     order: 90,
     slots: {
       sidebar_content(ctx: SidebarContentContext) {
@@ -2512,7 +2529,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
           kind: "slot.sidebar_content",
           ctxSessionID: ctx.session_id,
           resolvedSessionID: sessionID,
-          route: api.route.current,
+          route: api.route?.current,
           childCount: Object.keys(state().children).length,
         });
         return (
@@ -2548,7 +2565,8 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
             : {}),
           ref: composePromptRef(props.ref),
         };
-        return <api.ui.Prompt {...promptProps} />;
+        const Prompt = api.ui?.Prompt;
+        return Prompt ? <Prompt {...promptProps} /> : undefined;
       },
       session_prompt(_ctx: TuiSlotContext, props: SessionPromptProps) {
         const sessionID = props.sessionID ?? props.session_id;
@@ -2563,14 +2581,17 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
           right:
             props.right ??
             (sessionID ? (
-              <api.ui.Slot name="session_prompt_right" session_id={sessionID} />
+              api.ui?.Slot ? (
+                <api.ui.Slot name="session_prompt_right" session_id={sessionID} />
+              ) : undefined
             ) : undefined),
           ref: composePromptRef(props.ref),
         };
-        return <api.ui.Prompt {...promptProps} />;
+        const Prompt = api.ui?.Prompt;
+        return Prompt ? <Prompt {...promptProps} /> : undefined;
       },
     },
-  });
+  }));
 }
 
 const tui: TuiPlugin = async (api: TuiPluginApi) => {

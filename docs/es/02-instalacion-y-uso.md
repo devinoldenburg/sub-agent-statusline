@@ -37,11 +37,11 @@ Ejemplo conceptual:
 
 ```txt
 Subagentes
-  ● Review current diff       00:42
-  ✓ Run tests                 01:10
-  ✕ Typecheck                 00:08
+  RUN Review current diff       00:42
+  OK Run tests                 01:10
+  ERR Typecheck                 00:08
 
-↳ 1 running · 1 done · 1 error · Σ 3 total
+-> 1 running | 1 done | 1 error | 3 total
 ```
 
 Los textos exactos pueden variar según el estado, la versión de OpenCode y la información disponible en eventos.
@@ -88,7 +88,7 @@ OpenCode puede emitir muchas palabras distintas para estados. El plugin las norm
 
 ## Total ejecutado
 
-El total mostrado como `Σ total` no es una suma de filas visibles.
+El total mostrado como `total` no es una suma de filas visibles.
 
 Representa ejecuciones reales de subagentes.
 

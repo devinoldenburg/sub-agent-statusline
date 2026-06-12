@@ -119,7 +119,7 @@ children = {
 Expected visible row:
 
 ```txt
-Review current diff · done
+Review current diff | done
 ```
 
 The real session contributes terminal status, while the subtask keeps the better title.
@@ -178,7 +178,7 @@ The project can also produce text statusline output.
 Conceptual example:
 
 ```txt
-↳ 1 running · 1 done · 0 error · Σ 2 total · Review diff 00:42 · Tests 01:10
+-> 1 running | 1 done | 0 error | 2 total | Review diff 00:42 | Tests 01:10
 ```
 
 Text rendering includes:
@@ -202,7 +202,7 @@ Durations are compact:
 Token/context examples:
 
 ```txt
-1,500 tokens · 12.3% used
+1,500 tokens | 12.3% used
 1.5k ctx 12%
 ```
 
@@ -223,13 +223,13 @@ OPENCODE_SUBAGENT_STATUSLINE_COLOR=0
 Aggregate output may look like:
 
 ```txt
-↳ 1 running · 0 done · 1 error · Σ 2 total
+-> 1 running | 0 done | 1 error | 2 total
 ```
 
 Important distinction:
 
 - `running`, `done`, and `error` describe visible or relevant rows;
-- `Σ total` comes from semantic counters;
+- `total` comes from semantic counters;
 - the total may be larger than the current visible row count.
 
 ## When fewer rows are correct

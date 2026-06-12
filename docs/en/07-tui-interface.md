@@ -33,9 +33,9 @@ Conceptual example:
 ```txt
 Subagentes
 
-● Review current diff        00:42
-✓ Run focused tests          01:10 · 1.5k ctx 12%
-✕ Typecheck                  00:08
+RUN Review current diff        00:42
+OK Run focused tests          01:10 | 1.5k ctx 12%
+ERR Typecheck                  00:08
 ```
 
 ## Current session and other sessions
@@ -59,7 +59,7 @@ Old `done` rows may disappear so the sidebar does not become an infinite history
 When relevant activity exists, the plugin can show a compact home summary:
 
 ```txt
-↳ 1 running · 1 done · 0 error · Σ 2 total
+-> 1 running | 1 done | 0 error | 2 total
 ```
 
 This gives a quick signal without opening the sidebar.

@@ -1,4 +1,6 @@
 import type { ChildSessionState, StatuslineState } from "./state.js";
+import { resolveConfig } from "./config.js";
+import { currentSymbols } from "./symbols.js";
 
 const ansi = {
   reset: "\u001B[0m",
@@ -9,10 +11,7 @@ const ansi = {
 };
 
 function colorsEnabled(): boolean {
-  if (process.env.NO_COLOR) return false;
-  const fromEnv = process.env.OPENCODE_SUBAGENT_STATUSLINE_COLOR;
-  if (fromEnv === "0") return false;
-  return true;
+  return resolveConfig().color;
 }
 
 function paint(text: string, color: string, enabled: boolean): string {
@@ -84,6 +83,7 @@ function formatCompactPercentUsed(percent: number): string {
 export function formatContextDetails(
   child: ChildSessionState,
 ): string | undefined {
+  const symbols = currentSymbols();
   const total = resolveTokenTotal(child);
   const percent = child.tokens?.contextPercent;
 
@@ -91,7 +91,7 @@ export function formatContextDetails(
   const hasTotal = typeof total === "number" && Number.isFinite(total);
 
   if (hasTotal && hasPercent) {
-    return `${formatTokenCount(total)} · ${formatPercentUsed(percent)}`;
+    return `${formatTokenCount(total)}${symbols.separator}${formatPercentUsed(percent)}`;
   }
 
   if (hasTotal) {
@@ -362,6 +362,7 @@ export function visibleSubagentWorkItems(
 }
 
 export function renderStatusLine(state: StatuslineState): string {
+  const symbols = currentSymbols();
   const children = visibleSubagentWorkItems(Object.values(state.children)).sort(
     byPriority,
   );
@@ -371,7 +372,7 @@ export function renderStatusLine(state: StatuslineState): string {
   const totalExecuted = formatNumber(state.totalExecuted ?? 0);
   const colorOn = colorsEnabled();
 
-  const aggregate = `↳ ${running} running · ${done} done · ${error} error · Σ ${totalExecuted} total`;
+  const aggregate = `${symbols.branch} ${running} running${symbols.separator}${done} done${symbols.separator}${error} error${symbols.separator}${totalExecuted} ${symbols.total}`;
   if (children.length === 0) return aggregate;
 
   const details = children
@@ -382,7 +383,7 @@ export function renderStatusLine(state: StatuslineState): string {
         .join(" ");
       return paint(label, childColor(child), colorOn);
     })
-    .join(paint(" · ", ansi.gray, colorOn));
+    .join(paint(symbols.separator, ansi.gray, colorOn));
 
-  return `${aggregate} · ${details}`;
+  return `${aggregate}${symbols.separator}${details}`;
 }

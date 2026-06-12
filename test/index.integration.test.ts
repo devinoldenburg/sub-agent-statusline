@@ -20,7 +20,7 @@ describe("SubagentStatusline runtime", () => {
     const plugin = await createPlugin();
     const event = await readJsonFixture("session-created");
 
-    expect(await readStatusText(harness.textPath)).toBe("↳ 0 running · 0 done · 0 error · Σ 0 total");
+    expect(await readStatusText(harness.textPath)).toBe("-> 0 running | 0 done | 0 error | 0 total");
 
     await expect(plugin.event?.({ event } as never)).resolves.toBeUndefined();
 

@@ -1,5 +1,6 @@
 import type { ChildTokenState, StatuslineState } from "./state.js";
 import { deriveOpenCodeSessionStatus } from "./reconcile.js";
+import { currentSymbols } from "./symbols.js";
 import {
   markChildStatus,
   upsertChildDetails,
@@ -18,6 +19,7 @@ export type EventLike = {
     id?: unknown;
     sessionID?: unknown;
     sessionId?: unknown;
+    session_id?: unknown;
     title?: unknown;
     name?: unknown;
     info?: {
@@ -28,18 +30,26 @@ export type EventLike = {
       subagent_type?: unknown;
       sessionID?: unknown;
       sessionId?: unknown;
+      session_id?: unknown;
       parentID?: unknown;
+      parentId?: unknown;
+      parent_id?: unknown;
       role?: unknown;
       time?: unknown;
       status?: unknown;
       state?: unknown;
     };
     parentID?: unknown;
+    parentId?: unknown;
+    parent_id?: unknown;
     part?: unknown;
     status?: unknown;
     state?: unknown;
   };
   parentID?: unknown;
+  parentId?: unknown;
+  parent_id?: unknown;
+  session_id?: unknown;
   [key: string]: unknown;
 };
 
@@ -78,11 +88,20 @@ export function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = asString(value);
+    if (text) return text;
+  }
+  return undefined;
+}
+
 function conciseText(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value.replace(/\s+/g, " ").trim();
   if (!text) return undefined;
-  return text.length > 180 ? `${text.slice(0, 179)}…` : text;
+  const symbols = currentSymbols();
+  return text.length > 180 ? `${text.slice(0, 177)}${symbols.ellipsis}` : text;
 }
 
 function sameDisplayText(
@@ -117,7 +136,8 @@ function promptTitle(value: unknown): string | undefined {
   if (!text) return undefined;
   const sentence = text.match(/^(.+?[.!?])\s/)?.[1]?.trim();
   const title = sentence && sentence.length <= 100 ? sentence : text;
-  return title.length > 100 ? `${title.slice(0, 99)}…` : title;
+  const symbols = currentSymbols();
+  return title.length > 100 ? `${title.slice(0, 97)}${symbols.ellipsis}` : title;
 }
 
 function firstUsefulTitle(candidates: unknown[]): string | undefined {
@@ -137,7 +157,17 @@ export function extractCreatedChild(event: EventLike): {
   updatedAt?: string;
 } | null {
   const info = event.properties?.info;
-  const parentID = asString(info?.parentID);
+  const parentID = firstString(
+    info?.parentID,
+    info?.parentId,
+    info?.parent_id,
+    event.properties?.parentID,
+    event.properties?.parentId,
+    event.properties?.parent_id,
+    event.parentID,
+    event.parentId,
+    event.parent_id,
+  );
   if (!parentID) return null;
 
   const id = asString(info?.id) ?? asString(event.properties?.id);
@@ -161,10 +191,13 @@ export function extractSessionID(event: EventLike): string | undefined {
   return (
     asString(event.properties?.sessionID) ??
     asString(event.properties?.sessionId) ??
+    asString(event.properties?.session_id) ??
     asString(event.properties?.info?.sessionID) ??
     asString(event.properties?.info?.sessionId) ??
+    asString(event.properties?.info?.session_id) ??
     asString(event.sessionID) ??
     asString(event.sessionId) ??
+    asString(event.session_id) ??
     asString(event.properties?.info?.id) ??
     asString(event.properties?.id)
   );
@@ -333,8 +366,17 @@ export function extractTaskToolEvidence(
         : "running";
 
   const metadata = isRecord(state.metadata) ? state.metadata : undefined;
-  const targetFromMetadata = asString(metadata?.sessionId);
-  const parentSessionID = asString(part.sessionID) ?? extractSessionID(event);
+  const targetFromMetadata = firstString(
+    metadata?.sessionId,
+    metadata?.sessionID,
+    metadata?.session_id,
+  );
+  const parentSessionID = firstString(
+    part.sessionID,
+    part.sessionId,
+    part.session_id,
+    extractSessionID(event),
+  );
   const targetFromOutput = parseTaskSessionIDFromOutput(
     state.output,
     parentSessionID,
@@ -477,8 +519,13 @@ function extractSubtaskChild(event: EventLike): SubtaskChild | null {
   if (!isRecord(part) || part.type !== "subtask") return null;
 
   const partID = asString(part.id);
-  const parentID = asString(part.sessionID) ?? extractSessionID(event);
-  const messageID = asString(part.messageID);
+  const parentID = firstString(
+    part.sessionID,
+    part.sessionId,
+    part.session_id,
+    extractSessionID(event),
+  );
+  const messageID = firstString(part.messageID, part.messageId, part.message_id);
   if (!partID || !parentID || !messageID) return null;
 
   const description = asString(part.description);
@@ -525,8 +572,13 @@ function extractToolChild(event: EventLike): ToolChild | null {
   if (tool !== "delegate" && tool !== "task") return null;
 
   const partID = asString(part.id);
-  const parentID = asString(part.sessionID) ?? extractSessionID(event);
-  const messageID = asString(part.messageID);
+  const parentID = firstString(
+    part.sessionID,
+    part.sessionId,
+    part.session_id,
+    extractSessionID(event),
+  );
+  const messageID = firstString(part.messageID, part.messageId, part.message_id);
   const state = isRecord(part.state) ? part.state : undefined;
   if (!partID || !parentID || !messageID || !state) return null;
 

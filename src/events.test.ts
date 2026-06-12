@@ -64,6 +64,28 @@ describe("events", () => {
     expect(state.countedChildIDs.ses_child_1).toBe(true);
   });
 
+  it("accepts alternate parent id spellings in session-created events", () => {
+    const state = createEmptyState();
+
+    expect(
+      applySubagentEvent(state, {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "ses_child_alt",
+            parent_id: "ses_parent_alt",
+            title: "Alternate fields",
+          },
+        },
+      }),
+    ).toBe(true);
+
+    expect(state.children.ses_child_alt).toMatchObject({
+      parentID: "ses_parent_alt",
+      status: "running",
+    });
+  });
+
   it("extracts useful tool details while replacing technical delegation titles", async () => {
     const event = await readJsonFixture<EventLike>("tool-updated");
 
@@ -197,6 +219,56 @@ describe("extractTaskToolEvidence", () => {
       status: "done",
       targetSessionID: "ses_child_1",
       endedAt: "2026-04-30T12:00:00.000Z",
+    });
+  });
+
+  it("extracts task evidence from snake-case metadata", () => {
+    const evidence = extractTaskToolEvidence({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          type: "tool",
+          tool: "task",
+          state: {
+            status: "completed",
+            metadata: { session_id: "ses_child_snake" },
+          },
+        },
+      },
+    });
+
+    expect(evidence?.targetSessionID).toBe("ses_child_snake");
+    expect(evidence?.status).toBe("done");
+  });
+
+  it("creates task rows with alternate message and session field names", () => {
+    const state = createEmptyState();
+
+    expect(
+      applySubagentEvent(state, {
+        type: "message.part.updated",
+        properties: {
+          session_id: "ses_parent_snake",
+          part: {
+            type: "tool",
+            tool: "task",
+            id: "part_snake",
+            session_id: "ses_parent_snake",
+            message_id: "msg_snake",
+            state: {
+              status: "running",
+              input: { description: "Run snake-case task" },
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+
+    expect(state.children["tool:part_snake"]).toMatchObject({
+      parentID: "ses_parent_snake",
+      messageID: "msg_snake",
+      title: "Run snake-case task",
+      status: "running",
     });
   });
 

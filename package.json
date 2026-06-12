@@ -1,11 +1,11 @@
 {
   "name": "opencode-subagent-statusline",
-  "version": "0.7.0",
-  "description": "OpenCode plugin that exposes subagent session statusline state",
+  "version": "0.8.0",
+  "description": "Production-ready OpenCode TUI plugin for subagent session status",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Joaquinvesapa/sub-agent-statusline"
+    "url": "https://github.com/devinoldenburg/sub-agent-statusline"
   },
   "packageManager": "pnpm@11.1.2",
   "engines": {
@@ -45,6 +45,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "check:no-emoji": "tsx scripts/assert-no-emoji.ts README.md docs src SECURITY.md CONTRIBUTING.md CHANGELOG.md",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "tsup --watch"
   },
@@ -73,6 +74,7 @@
     "@vitest/coverage-v8": "^4.1.5",
     "esbuild-plugin-solid": "^0.6.0",
     "semantic-release": "^24.2.9",
+    "tsx": "^4.20.6",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3",
     "vitest": "^4.1.5"

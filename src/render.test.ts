@@ -36,8 +36,8 @@ describe("render", () => {
 
     expect(formatDuration(61000)).toBe("01:01");
     expect(formatDuration(3_661_000)).toBe("01:01:01");
-    expect(formatContextDetails(withTokens)).toBe("1,500 tokens · 12.3% used");
-    expect(formatContext(withTokens)).toBe("ctx 1,500 tokens · 12.3% used");
+    expect(formatContextDetails(withTokens)).toBe("1,500 tokens | 12.3% used");
+    expect(formatContext(withTokens)).toBe("ctx 1,500 tokens | 12.3% used");
     expect(formatContextCompact(withTokens)).toBe("1.5k ctx 12%");
   });
 
@@ -227,9 +227,42 @@ describe("render", () => {
     };
 
     expect(renderStatusLine(state)).toContain(
-      "↳ 1 running · 0 done · 1 error · Σ 2 total",
+      "-> 1 running | 0 done | 1 error | 2 total",
     );
     expect(renderStatusLine(state)).toContain("Run tests 01:01");
     expect(renderStatusLine(state)).not.toContain("\u001B[");
+  });
+
+  it("renders ASCII-only output by default", () => {
+    process.env.NO_COLOR = "1";
+    const state: StatuslineState = {
+      children: {
+        running: child({ id: "running", title: "Run tests" }),
+      },
+      countedChildIDs: { running: true },
+      totalExecuted: 1,
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    };
+
+    expect(renderStatusLine(state)).toBe(
+      "-> 1 running | 0 done | 0 error | 1 total | Run tests 01:01",
+    );
+    expect([...renderStatusLine(state)].every((char) => char.charCodeAt(0) < 128)).toBe(
+      true,
+    );
+    delete process.env.NO_COLOR;
+  });
+
+  it("supports Unicode mode only when configured", () => {
+    process.env.OPENCODE_SUBAGENT_STATUSLINE_SYMBOL_MODE = "unicode";
+    const state: StatuslineState = {
+      children: {},
+      countedChildIDs: {},
+      totalExecuted: 0,
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    };
+
+    expect(renderStatusLine(state)).toBe("↳ 0 running · 0 done · 0 error · 0 Σ");
+    delete process.env.OPENCODE_SUBAGENT_STATUSLINE_SYMBOL_MODE;
   });
 });

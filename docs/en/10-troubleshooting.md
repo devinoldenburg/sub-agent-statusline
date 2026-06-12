@@ -126,7 +126,7 @@ See:
 
 This can also be correct.
 
-`Σ total` counts real executions, not visible rows.
+`total` counts real executions, not visible rows.
 
 | Case | Why it happens |
 | --- | --- |

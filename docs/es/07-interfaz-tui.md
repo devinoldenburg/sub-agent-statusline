@@ -33,9 +33,9 @@ Ejemplo conceptual:
 ```txt
 Subagentes
 
-● Review current diff        00:42
-✓ Run focused tests          01:10 · 1.5k ctx 12%
-✕ Typecheck                  00:08
+RUN Review current diff        00:42
+OK Run focused tests          01:10 | 1.5k ctx 12%
+ERR Typecheck                  00:08
 ```
 
 ## Sesión actual y otras sesiones
@@ -66,7 +66,7 @@ Cuando hay actividad relevante, el plugin puede mostrar un resumen compacto en l
 Ejemplo:
 
 ```txt
-↳ 1 running · 1 done · 0 error · Σ 2 total
+-> 1 running | 1 done | 0 error | 2 total
 ```
 
 Este resumen sirve para saber rápidamente si hay subagentes activos sin abrir la sidebar.

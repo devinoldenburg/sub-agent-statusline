@@ -126,7 +126,7 @@ Si querés entender la regla, leé:
 
 También puede ser correcto.
 
-`Σ total` cuenta ejecuciones reales, no filas visibles.
+`total` cuenta ejecuciones reales, no filas visibles.
 
 Casos normales:
 

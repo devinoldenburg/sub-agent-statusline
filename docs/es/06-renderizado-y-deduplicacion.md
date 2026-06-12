@@ -39,9 +39,9 @@ Para el usuario, eso suele ser una sola delegación.
 Si la UI mostrara todo sin procesar, aparecerían duplicados como:
 
 ```txt
-↳ Run tests       running
-↳ Run tests       running
-↳ test-agent      running
+-> Run tests       running
+-> Run tests       running
+-> test-agent      running
 ```
 
 El render intenta mostrar una sola fila clara, usando la mejor evidencia disponible.
@@ -135,7 +135,7 @@ children = {
 Fila visible esperada:
 
 ```txt
-Review current diff · done
+Review current diff | done
 ```
 
 La sesión real aporta el estado terminal, pero la fila conserva el título más útil del subtask.
@@ -198,7 +198,7 @@ Además de la sidebar TUI, el proyecto puede producir un statusline textual.
 Ejemplo conceptual:
 
 ```txt
-↳ 1 running · 1 done · 0 error · Σ 2 total · Review diff 00:42 · Tests 01:10
+-> 1 running | 1 done | 0 error | 2 total | Review diff 00:42 | Tests 01:10
 ```
 
 El render textual incluye:
@@ -234,7 +234,7 @@ Cuando hay información disponible, el plugin puede mostrar tokens y uso de cont
 Ejemplos conceptuales:
 
 ```txt
-1,500 tokens · 12.3% used
+1,500 tokens | 12.3% used
 1.5k ctx 12%
 ```
 
@@ -265,13 +265,13 @@ El resumen agregado se basa en filas visibles y total semántico.
 Ejemplo:
 
 ```txt
-↳ 1 running · 0 done · 1 error · Σ 2 total
+-> 1 running | 0 done | 1 error | 2 total
 ```
 
 Importante:
 
 - `running`, `done` y `error` describen filas visibles o relevantes;
-- `Σ total` viene del contador semántico;
+- `total` viene del contador semántico;
 - el total puede ser mayor que la cantidad de filas visibles actuales.
 
 ## Casos donde ver menos filas es correcto

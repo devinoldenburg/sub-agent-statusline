@@ -6,8 +6,8 @@ We only support the latest published version of this project with security updat
 
 | Version | Supported |
 | ------- | --------- |
-| Latest  | ✅ |
-| Older   | ❌ |
+| Latest  | PASS |
+| Older   | FAIL |
 
 ## Reporting a Vulnerability
 
