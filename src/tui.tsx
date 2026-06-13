@@ -89,6 +89,7 @@ const RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS = 60_000;
 const RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS = 5 * 60_000;
 const SUBAGENTS_EXPANDED_KV_KEY = "subagents.sidebar.expanded";
 const SUBAGENTS_SECTION_ENABLED_KV_KEY = "subagents.sidebar.enabled";
+const TUI_HEALTH_CHILD_ID = "subagent-statusline:tui-health";
 const SUBAGENTS_MAX_VISIBLE_ROWS = 5;
 const SUBAGENTS_RUNNING_ROW_HEIGHT = 3;
 const SUBAGENTS_TERMINAL_ROW_HEIGHT = 2;
@@ -209,6 +210,8 @@ interface RunningReconcileCandidate {
   startedMs: number;
   updatedMs: number;
 }
+
+type TuiHealthStatus = "ok" | "degraded";
 
 const doneTokenCache = new Map<string, RehydratedTokenCacheEntry>();
 
@@ -547,6 +550,37 @@ function persistStateSnapshot(
       // Persistence is best-effort; TUI rendering must not fail because of files.
     }
   })();
+}
+
+export function upsertTuiHealth(
+  state: StatuslineState,
+  status: TuiHealthStatus,
+  summary: string,
+): boolean {
+  if (status === "ok") {
+    if (!state.children[TUI_HEALTH_CHILD_ID]) return false;
+    delete state.children[TUI_HEALTH_CHILD_ID];
+    state.updatedAt = new Date().toISOString();
+    return true;
+  }
+
+  const now = new Date().toISOString();
+  const existing = state.children[TUI_HEALTH_CHILD_ID];
+  state.children[TUI_HEALTH_CHILD_ID] = {
+    id: TUI_HEALTH_CHILD_ID,
+    title: "OpenCode compatibility degraded",
+    summary,
+    parentID: "",
+    source: "tool",
+    status: "error",
+    color: "red",
+    startedAt: existing?.startedAt ?? now,
+    updatedAt: now,
+    endedAt: now,
+    elapsedMs: 0,
+  };
+  state.updatedAt = now;
+  return !existing || existing.summary !== summary;
 }
 
 function refreshLiveState(state: StatuslineState): boolean {
@@ -1444,6 +1478,9 @@ function SidebarSubagents(props: {
             <Show when={showingOtherSessions()}>
               <text fg={props.theme.textMuted}>Other sessions</text>
             </Show>
+            <Show when={visibleChildIDs().length === 0}>
+              <text fg={props.theme.textMuted}>No subagent activity yet</text>
+            </Show>
             <For each={visibleChildIDs()}>
               {(childID: string) => <ChildRow childID={childID} />}
             </For>
@@ -2157,9 +2194,25 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
       );
       if (disposed) {
         clearHydrateRetryTimeout(sessionID);
-        finishHydrating();
+        setHydratingSessions((prev) => {
+          if (!prev.has(sessionID)) return prev;
+          const next = new Set(prev);
+          next.delete(sessionID);
+          return next;
+        });
         return;
       }
+      setState((current: StatuslineState) => {
+        const next = cloneState(current);
+        const changed = upsertTuiHealth(
+          next,
+          hydrated ? "ok" : "degraded",
+          "OpenCode session data is incomplete; live events will continue updating when available.",
+        );
+        if (!changed) return current;
+        persistStateSnapshot(statePath, textPath, next);
+        return next;
+      });
       if (hydrated) {
         resetHydrateRetry(sessionID);
         setHydratedSessions((prev) => {
@@ -2422,7 +2475,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
         );
       }
 
-      if (mutations.length === 0) return;
+      if (mutations.length === 0 || disposed) return;
 
       snapshotSidebarScrollOffsets();
       setState((current: StatuslineState) => {
@@ -2566,7 +2619,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
           ref: composePromptRef(props.ref),
         };
         const Prompt = api.ui?.Prompt;
-        return Prompt ? <Prompt {...promptProps} /> : undefined;
+        return Prompt ? <Prompt {...promptProps} /> : null;
       },
       session_prompt(_ctx: TuiSlotContext, props: SessionPromptProps) {
         const sessionID = props.sessionID ?? props.session_id;
@@ -2583,12 +2636,12 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
             (sessionID ? (
               api.ui?.Slot ? (
                 <api.ui.Slot name="session_prompt_right" session_id={sessionID} />
-              ) : undefined
+              ) : null
             ) : undefined),
           ref: composePromptRef(props.ref),
         };
         const Prompt = api.ui?.Prompt;
-        return Prompt ? <Prompt {...promptProps} /> : undefined;
+        return Prompt ? <Prompt {...promptProps} /> : null;
       },
     },
   }));
