@@ -118,6 +118,14 @@ function createMockApi() {
   return { api, eventDisposers, eventHandlers, lifecycleCallbacks, registeredSlots };
 }
 
+function collectRenderedText(input: unknown): string[] {
+  if (typeof input === "string") return [input];
+  if (Array.isArray(input)) return input.flatMap(collectRenderedText);
+  if (!input || typeof input !== "object") return [];
+  const node = input as { props?: { children?: unknown } };
+  return collectRenderedText(node.props?.children);
+}
+
 describe("TUI plugin contract", () => {
   it("registers events, slots, commands, and lifecycle cleanup exactly once", async () => {
     const { default: plugin } = await import("./tui.js");
@@ -202,6 +210,34 @@ describe("TUI plugin contract", () => {
     await expect(plugin.tui(api as never, undefined, {} as never)).resolves.toBeUndefined();
     expect(api.slots.register).toHaveBeenCalledOnce();
     expect(api.event.on).toHaveBeenCalledTimes(7);
+  });
+
+  it("renders sidebar aggregate counts with symbols instead of text badges", async () => {
+    const { default: plugin } = await import("./tui.js");
+    const { api, registeredSlots } = createMockApi();
+    await plugin.tui(api as never, undefined, {} as never);
+    const slots = registeredSlots[0]?.slots as Record<
+      string,
+      (ctx: unknown, props?: Record<string, unknown>) => unknown
+    >;
+
+    const rendered = slots.sidebar_content({
+      session_id: "ses_parent",
+      theme: createTheme(),
+      width: 34,
+    });
+    const text = collectRenderedText(rendered).join(" ");
+
+    expect(text).toContain("> 0");
+    expect(text).toContain("+ 0");
+    expect(text).toContain("! 0");
+    expect(text).toContain("# 0");
+    expect(text).not.toContain("[run]");
+    expect(text).not.toContain("[ok]");
+    expect(text).not.toContain("[err]");
+    expect(text).not.toContain(" run");
+    expect(text).not.toContain(" done");
+    expect(text).not.toContain(" err");
   });
 
   it("applies captured OpenCode events and persists status text", async () => {

@@ -70,6 +70,14 @@ import {
 import { registerSubagentCommands } from "./tui-commands.js";
 import { t } from "./i18n.js";
 import { currentSymbols } from "./symbols.js";
+import {
+  sidebarAggregateTitle,
+  sidebarAggregateSegments,
+  sidebarRowContinuationIndent,
+  sidebarRowPrefixWidth,
+  sidebarStatusLabel,
+  sidebarStatusMarker,
+} from "./sidebar-symbols.js";
 
 const TUI_PLUGIN_ID = "subagent-statusline.tui";
 const ELAPSED_TICK_MS = 1000;
@@ -607,10 +615,11 @@ function elapsedMs(child: ChildSessionState, nowMs: number): number {
 }
 
 function taskStatusMarker(status: ChildSessionState["status"]): string {
-  const symbols = currentSymbols();
-  if (status === "done") return symbols.done;
-  if (status === "error") return symbols.error;
-  return symbols.running;
+  return sidebarStatusMarker(status, currentSymbols());
+}
+
+function taskStatusLabel(status: ChildSessionState["status"]): string {
+  return sidebarStatusLabel(status);
 }
 
 function statusColor(
@@ -1267,7 +1276,11 @@ function SidebarSubagents(props: {
     const rowOpacity = createMemo(() =>
       status() === "running" ? 1 : INACTIVE_SUBAGENT_OPACITY,
     );
-    const markerWidth = 4;
+    const marker = createMemo(() => taskStatusMarker(status()));
+    const rowPrefixWidth = createMemo(() => sidebarRowPrefixWidth(marker()));
+    const continuationIndent = createMemo(() =>
+      sidebarRowContinuationIndent(marker()),
+    );
     const line = createMemo(() => {
       const currentChild = child();
       if (!currentChild) {
@@ -1277,7 +1290,7 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: rowPrefixWidth(),
       });
     });
     const terminalLine = createMemo(() => {
@@ -1287,7 +1300,7 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: rowPrefixWidth(),
       });
     });
     const hasSecondaryLine = createMemo(() => Boolean(line().secondaryLine));
@@ -1348,6 +1361,7 @@ function SidebarSubagents(props: {
         onKeyDown={clickable() ? handleKeyDown : undefined}
         focusable={clickable()}
         focused={clickable() && focused()}
+        title={`${taskStatusLabel(status())}: ${child()?.title ?? rowProps.childID}`}
       >
         <Show
           when={status() === "running"}
@@ -1360,7 +1374,7 @@ function SidebarSubagents(props: {
                   {selected() ? symbols.selected : " "}
                 </text>
                 <text fg={statusColor(status(), props.theme)}>
-                  {taskStatusMarker(status())}
+                  {marker()}
                 </text>
                 <text
                   fg={
@@ -1374,7 +1388,7 @@ function SidebarSubagents(props: {
               </box>
               <text
                 fg={emphasized() ? props.theme.text : props.theme.textMuted}
-              >{`    ${symbols.branch} ${symbols.clock} ${terminalLine().meta}`}</text>
+                >{`${continuationIndent()}${symbols.branch} ${symbols.clock} ${terminalLine().meta}`}</text>
             </box>
           }
         >
@@ -1386,7 +1400,7 @@ function SidebarSubagents(props: {
                 {selected() ? symbols.selected : " "}
               </text>
               <text fg={statusColor(status(), props.theme)}>
-                {taskStatusMarker(status())}
+                {marker()}
               </text>
               <text
                 fg={
@@ -1402,10 +1416,10 @@ function SidebarSubagents(props: {
               {(secondaryLine: Accessor<string>) => (
                 <text
                   fg={muted() ? props.theme.textMuted : props.theme.text}
-                >{`    ${secondaryLine()}`}</text>
+                >{`${continuationIndent()}${secondaryLine()}`}</text>
               )}
             </Show>
-            <box flexDirection="row" paddingLeft={4}>
+            <box flexDirection="row" paddingLeft={rowPrefixWidth()}>
               <text
                 fg={emphasized() ? props.theme.text : props.theme.textMuted}
               >{`${symbols.branch} ${symbols.clock} ${line().elapsed}`}</text>
@@ -1421,15 +1435,29 @@ function SidebarSubagents(props: {
     );
   };
 
+  const aggregateInput = createMemo(() => ({
+        running: counts().running,
+        done: counts().done,
+        error: counts().error,
+        total: totalExecuted(),
+      }));
+  const aggregateSegments = createMemo(() =>
+    sidebarAggregateSegments(aggregateInput(), symbols),
+  );
+
   const AggregateBar = () => (
-    <box flexDirection="row" paddingRight={1}>
-      <text fg={props.theme.warning}>{`${symbols.running} ${counts().running} run`}</text>
+    <box
+      flexDirection="row"
+      paddingRight={1}
+      title={sidebarAggregateTitle(aggregateInput())}
+    >
+      <text fg={props.theme.warning}>{aggregateSegments()[0]}</text>
       <text fg={props.theme.textMuted}>{symbols.separator}</text>
-      <text fg={props.theme.success}>{`${symbols.done} ${counts().done} done`}</text>
+      <text fg={props.theme.success}>{aggregateSegments()[1]}</text>
       <text fg={props.theme.textMuted}>{symbols.separator}</text>
-      <text fg={props.theme.error}>{`${symbols.error} ${counts().error} err`}</text>
+      <text fg={props.theme.error}>{aggregateSegments()[2]}</text>
       <text fg={props.theme.textMuted}>{symbols.separator}</text>
-      <text fg={props.theme.text}>{`${symbols.total} ${totalExecuted()}`}</text>
+      <text fg={props.theme.text}>{aggregateSegments()[3]}</text>
     </box>
   );
 

@@ -13,6 +13,10 @@ export interface UiSymbols {
   running: string;
   done: string;
   error: string;
+  sidebarRunning: string;
+  sidebarDone: string;
+  sidebarError: string;
+  sidebarTotal: string;
 }
 
 const ASCII_SYMBOLS: UiSymbols = {
@@ -28,6 +32,10 @@ const ASCII_SYMBOLS: UiSymbols = {
   running: "[run]",
   done: "[ok]",
   error: "[err]",
+  sidebarRunning: ">",
+  sidebarDone: "+",
+  sidebarError: "!",
+  sidebarTotal: "#",
 };
 
 const UNICODE_SYMBOLS: UiSymbols = {
@@ -43,6 +51,10 @@ const UNICODE_SYMBOLS: UiSymbols = {
   running: "●",
   done: "✓",
   error: "✕",
+  sidebarRunning: "●",
+  sidebarDone: "✓",
+  sidebarError: "!",
+  sidebarTotal: "Σ",
 };
 
 export function getSymbols(mode: SymbolMode = resolveConfig().symbolMode): UiSymbols {

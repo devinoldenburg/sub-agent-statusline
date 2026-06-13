@@ -50,6 +50,8 @@ Unicode mode keeps compact symbols without emoji:
 OPENCODE_SUBAGENT_STATUSLINE_SYMBOL_MODE=unicode opencode
 ```
 
+The sidebar always uses compact status symbols instead of text badges: `>` running, `+` done, and `!` error in ASCII mode. Unicode mode swaps running/done to compact glyphs while keeping `!` for errors.
+
 ## Keyboard Navigation
 
 Run `Subagents: Focus sidebar list` from the OpenCode command palette, or press `Alt+B`.
