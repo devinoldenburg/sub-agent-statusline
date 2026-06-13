@@ -13,14 +13,17 @@ importers:
         version: 1.9.12
     devDependencies:
       '@opencode-ai/plugin':
-        specifier: ^1.14.50
-        version: 1.14.50(@opentui/core@0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/solid@0.2.10(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))
+        specifier: ^1.17.4
+        version: 1.17.4(@opentui/core@0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/keymap@0.4.1(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))
       '@opentui/core':
-        specifier: ^0.2.10
-        version: 0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10)
+        specifier: ^0.4.1
+        version: 0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/keymap':
+        specifier: ^0.4.1
+        version: 0.4.1(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
       '@opentui/solid':
-        specifier: ^0.2.10
-        version: 0.2.10(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+        specifier: ^0.4.1
+        version: 0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
       '@semantic-release/commit-analyzer':
         specifier: ^13.0.1
         version: 13.0.1(semantic-release@24.2.9(typescript@5.9.3))
@@ -47,7 +50,7 @@ importers:
         version: 24.2.9(typescript@5.9.3)
       tsup:
         specifier: ^8.5.1
-        version: 8.5.1(postcss@8.5.14)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.8.3)
+        version: 8.5.1(postcss@8.5.14)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0)
       tsx:
         specifier: ^4.20.6
         version: 4.22.4
@@ -56,7 +59,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3))
+        version: 4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0))
 
 packages:
 
@@ -539,33 +542,33 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
-    resolution: {integrity: sha512-QZHtlVgbAdy2zAqNA9Gu1UpIuI8Xvsd1v8ic6B2pZmeFnFcMWiPLfWXh7TVw4eGEZ/C9TH281KwhVoeQUKbyjw==}
+  '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
+    resolution: {integrity: sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.3':
-    resolution: {integrity: sha512-mdzd3AVzYKuUmiWOQ8GNhl64/IoFGol569zNRdkLReh6LRLHOXxU4U8eq0JwaD8iFHdVGqSy4IjFL4reoWCDFw==}
+  '@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.4':
+    resolution: {integrity: sha512-zExlW9zUJKZH/tOtVMttwjKa4Xm/3KcNjnE3dPN92uCktwavMxpgCA3MoJK/DOnTWsQgo224OaST27/mPNAf+w==}
     cpu: [x64]
     os: [darwin]
 
-  '@msgpackr-extract/msgpackr-extract-linux-arm64@3.0.3':
-    resolution: {integrity: sha512-YxQL+ax0XqBJDZiKimS2XQaf+2wDGVa1enVRGzEvLLVFeqa5kx2bWbtcSXgsxjQB7nRqqIGFIcLteF/sHeVtQg==}
+  '@msgpackr-extract/msgpackr-extract-linux-arm64@3.0.4':
+    resolution: {integrity: sha512-dgX0P/9wGPJeHFBG+ZmhgE6bmtMt7NP5CRBGyyktpopdk/mW4POnrpQsSLtKI1dwpc+pPLuXHDh6vvskyQE/sw==}
     cpu: [arm64]
     os: [linux]
 
-  '@msgpackr-extract/msgpackr-extract-linux-arm@3.0.3':
-    resolution: {integrity: sha512-fg0uy/dG/nZEXfYilKoRe7yALaNmHoYeIoJuJ7KJ+YyU2bvY8vPv27f7UKhGRpY6euFYqEVhxCFZgAUNQBM3nw==}
+  '@msgpackr-extract/msgpackr-extract-linux-arm@3.0.4':
+    resolution: {integrity: sha512-Tg3yX65f5GbtXLkrYEHE5oibZG9epyYWas7FogTTEJeDEF9JlXJzKgXaNhT3UXlTOeA+AfZpYZYZ0uPj7Cfquw==}
     cpu: [arm]
     os: [linux]
 
-  '@msgpackr-extract/msgpackr-extract-linux-x64@3.0.3':
-    resolution: {integrity: sha512-cvwNfbP07pKUfq1uH+S6KJ7dT9K8WOE4ZiAcsrSes+UY55E/0jLYc+vq+DO7jlmqRb5zAggExKm0H7O/CBaesg==}
+  '@msgpackr-extract/msgpackr-extract-linux-x64@3.0.4':
+    resolution: {integrity: sha512-8TNXMEjJc3QEy7R/x1INhgiU+XakDAFUzBhaz7+Rbrs8NH5UQeHQxxmzsSBJGyV6I1jW79undiQm8tOI+D+8FQ==}
     cpu: [x64]
     os: [linux]
 
-  '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3':
-    resolution: {integrity: sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==}
+  '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
+    resolution: {integrity: sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ==}
     cpu: [x64]
     os: [win32]
 
@@ -629,12 +632,12 @@ packages:
   '@octokit/types@16.0.0':
     resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
 
-  '@opencode-ai/plugin@1.14.50':
-    resolution: {integrity: sha512-2D4k6r8IFaAajEmezOZ3UKmRRGqEw2YzqotH5zLGT434yKtabduEsQgXa0fWlASut4FVT3JURhq5LqeBUV/k4g==}
+  '@opencode-ai/plugin@1.17.4':
+    resolution: {integrity: sha512-jqXxfYnunCwyiEEsdVNDsKUhKznXytAntwzeW3uLd2zbIYsbVCiq5nG5ZSlo4mz1IXgRLWzXDYk1OnmfG15V2A==}
     peerDependencies:
-      '@opentui/core': '>=0.2.9'
-      '@opentui/keymap': '>=0.2.9'
-      '@opentui/solid': '>=0.2.9'
+      '@opentui/core': '>=0.3.4'
+      '@opentui/keymap': '>=0.3.4'
+      '@opentui/solid': '>=0.3.4'
     peerDependenciesMeta:
       '@opentui/core':
         optional: true
@@ -643,46 +646,75 @@ packages:
       '@opentui/solid':
         optional: true
 
-  '@opencode-ai/sdk@1.14.50':
-    resolution: {integrity: sha512-IrTKTFviR4Tj+u0BI8h8XgXIvEpxwkkHqBj6E0aEc4DBErpS3qh2Lkp1xt0OdtCYiLE3wZ1bAIiHOiO66H/7TA==}
+  '@opencode-ai/sdk@1.17.4':
+    resolution: {integrity: sha512-OdHkBoNIQOjQsPnFtkcxAp9HsLAKn/MQiq7wIQURkRARmw8yhFqGiMPYbNm+UfLn6bMkx97rdPkWQARejMyiXQ==}
 
-  '@opentui/core-darwin-arm64@0.2.10':
-    resolution: {integrity: sha512-+lbDDj42Og+UtTZEwlHhGXichmOlkxSqn0J+Jqjat5/Tt5oZykj1NZjFIQ7ZSz4Miz7EmZwgYKE2CyOmmm9MoQ==}
+  '@opentui/core-darwin-arm64@0.4.1':
+    resolution: {integrity: sha512-ocs73hj9n0zLArOTpUWIXCWU6ERThG+3wQzO78EvfaR4hb5FRrDHGKWTzXpr6ukSKsUtKdztK5XYTPsJ5e3vww==}
     cpu: [arm64]
     os: [darwin]
 
-  '@opentui/core-darwin-x64@0.2.10':
-    resolution: {integrity: sha512-5iAoA0aqMWWAQ93nh8Bb0ipwt9h+tvEFc88+YO9St43uUJ+XrXcmMj3T8wtl6dSu/SN0UoDWNaUMHUmtykiPtg==}
+  '@opentui/core-darwin-x64@0.4.1':
+    resolution: {integrity: sha512-YogRtDBfxGeOkcSHDMsGkKFBIt3cWPMPGNu2AmEN6a5KKjDYwAZCudwbDJaUbZDCJjfAUHz9iXjhJVXJBXs9vQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@opentui/core-linux-arm64@0.2.10':
-    resolution: {integrity: sha512-EnrkxgH5K76Oi/Br1UHPZblXG5P60snmtySfnxuVaeECNZrbTkV6BV/A0WoBeWshJweGbx1D+eTF+sEEjQCi8w==}
+  '@opentui/core-linux-arm64-musl@0.4.1':
+    resolution: {integrity: sha512-Eps9qB+vQ/Lel4ZYqMH87Um9oiU17Vu4oWzvRi40Yf+69vA1a3R4D7KUCeY3OxKWnRnwAHkMU9TxNnjKngPH/w==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@opentui/core-linux-arm64@0.4.1':
+    resolution: {integrity: sha512-sBZTS1eEGeVSQ8fAmDALKQcT7FckrhK64oHfEO7W0lJ+lXapfJuOKtTM33na54V56GAM9guk4RD4cbPeTXEh4g==}
     cpu: [arm64]
     os: [linux]
 
-  '@opentui/core-linux-x64@0.2.10':
-    resolution: {integrity: sha512-fI+r3kCPqIxsWwPVGpKUQy4zHK8y+jkDRCwa3UbaUy48RQ44jMuf2RhVhmi4xmCvSc8UPJBbYsw1tLuh9kmXjg==}
+  '@opentui/core-linux-x64-musl@0.4.1':
+    resolution: {integrity: sha512-UYcp8XGX4DZXN+VYUVuCrJkbFMJ0L+VUVu0t5KqqaeJ74fI4NZ+DmwNqPPg1+C+EIzoW4QChlEUdhlZRdiEQiA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@opentui/core-linux-x64@0.4.1':
+    resolution: {integrity: sha512-9/xjYGzX5RdUl0qmGQY0OCayjJ4VffDhsBmApQdseUkMT6LGL3RumI4zPK3Y9vo1fuy6ffLnriLFOktOgutXDg==}
     cpu: [x64]
     os: [linux]
 
-  '@opentui/core-win32-arm64@0.2.10':
-    resolution: {integrity: sha512-8F4z2hIRgkVWcr6CMVeJ9N4+1rmURPt2Pq2GBPko8ch6rxHR+a//KD1MfphyuLTHBS1tJ4vfZSWSoiaESImtrA==}
+  '@opentui/core-win32-arm64@0.4.1':
+    resolution: {integrity: sha512-hkIbpUJcKd4iLetTygPlFS45teOBTto49aXuxNeafYQUNd3ehiSwJENNBlAGULLfq+KP3dMJoWUiOcbuPVOQRA==}
     cpu: [arm64]
     os: [win32]
 
-  '@opentui/core-win32-x64@0.2.10':
-    resolution: {integrity: sha512-Ki+qNBlIFW5K2wcG/RHrlPp7yEQKXeiNX3mlje25iwX62Ac5w391HBpOmUjbPoq20McPyDRnhbLfbXQSPtickg==}
+  '@opentui/core-win32-x64@0.4.1':
+    resolution: {integrity: sha512-s1kGBcloy4ksl3wFCMqqOUFtXWlTTpzxe6pkLFhFhzgqKsMXHE9pwebiS3pzJkkFUxah5MYG+kbcn2Dw2Gdncg==}
     cpu: [x64]
     os: [win32]
 
-  '@opentui/core@0.2.10':
-    resolution: {integrity: sha512-oviCtx0jYjc7F8X2b8+0IkQLg6WH47Nwl6CFeZo5dU0k6OpSbTbi07ZleObaiECAp+S1YLhAtVdgzHU7hBZlaw==}
+  '@opentui/core@0.4.1':
+    resolution: {integrity: sha512-ejlunoFCGLcghYGdfamI/DlWHsgCTLbuoL2JeOmFuLsN+DM5phje3CQbGR4tpl24cadCgHJQFomjoQ9Htvin+Q==}
     peerDependencies:
       web-tree-sitter: 0.25.10
 
-  '@opentui/solid@0.2.10':
-    resolution: {integrity: sha512-+4/MB90yIQiPwg8Y4wY092yva9BvRTsJeeeEO3e2H7P8k8zxYk4G9bzuhqYLxA9mTVQ+zVDlrmFoPQhT7vpIRw==}
+  '@opentui/keymap@0.4.1':
+    resolution: {integrity: sha512-4Wds3HynfTPURawkdlO8CjrzfSvxSF5RO2jlpv6etT+JTQjKSKdVrBcza6N77qWqKy0Qi0D/u2yuN6aTUJ0Z7Q==}
+    peerDependencies:
+      '@opentui/react': 0.4.1
+      '@opentui/solid': 0.4.1
+      react: '>=19.2.0'
+      solid-js: 1.9.12
+    peerDependenciesMeta:
+      '@opentui/react':
+        optional: true
+      '@opentui/solid':
+        optional: true
+      react:
+        optional: true
+      solid-js:
+        optional: true
+
+  '@opentui/solid@0.4.1':
+    resolution: {integrity: sha512-CD3M3mlUFwy2r8fd43MFY8kR7bFO+CfL1LHjV6+adp7T4jpadb9zuhfKKJpMzSdgAqQof+F5ifGMx6RljiCmwQ==}
     peerDependencies:
       solid-js: 1.9.12
 
@@ -1143,8 +1175,8 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
-  bun-ffi-structs@0.2.2:
-    resolution: {integrity: sha512-N/ZWtyN0piZlrXQT7TO0V+q952orYqkfhXRXM1Hcbb+R3QSiBH4vLnib187Mrs1H7pWIYECAmPeapGYDOMCl+w==}
+  bun-ffi-structs@0.2.3:
+    resolution: {integrity: sha512-pgJiXP+hEgFo9qG51J6ItfY4ocs3vniwNzJ9WhoakB3QB2GdzQxX2EXssentPYlB2hOfJrTjO6iIQkWYzUodpg==}
     peerDependencies:
       typescript: ^5
 
@@ -1319,8 +1351,8 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
-  effect@4.0.0-beta.65:
-    resolution: {integrity: sha512-QYKvQPAj3CmtsvWkHQww15wX4KG2gNsszDWEcOO5sZCMknp66u6Si/Opmt3wwWCwsyvRmDAdIg+JIz5qzbbFIw==}
+  effect@4.0.0-beta.74:
+    resolution: {integrity: sha512-Yx+Kh12U+i2FmjwEfKs+ePFmpMd43RPD1oGqc/VraSS9bYzvF0Ff3PojwEFEVEewp8xc92Uxu28gTspU4qyvHA==}
 
   electron-to-chromium@1.5.344:
     resolution: {integrity: sha512-4MxfbmNDm+KPh066EZy+eUnkcDPcZ35wNmOWzFuh/ijvHsve6kbLTLURy88uCNK5FbpN+yk2nQY6BYh1GEt+wg==}
@@ -1407,8 +1439,8 @@ packages:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
     engines: {node: '>=12.0.0'}
 
-  fast-check@4.7.0:
-    resolution: {integrity: sha512-NsZRtqvSSoCP0HbNjUD+r1JH8zqZalyp6gLY9e7OYs7NK9b6AHOs2baBFeBG7bVNsuoukh89x2Yg3rPsul8ziQ==}
+  fast-check@4.8.0:
+    resolution: {integrity: sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg==}
     engines: {node: '>=12.17.0'}
 
   fast-content-type-parse@3.0.0:
@@ -1603,9 +1635,9 @@ packages:
   ini@1.3.8:
     resolution: {integrity: sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew==}
 
-  ini@6.0.0:
-    resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
-    engines: {node: ^20.17.0 || >=22.9.0}
+  ini@7.0.0:
+    resolution: {integrity: sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   into-stream@7.0.0:
     resolution: {integrity: sha512-2dYz766i9HprMBasCMvHMuazJ7u4WzhJwo5kb3iPSiW/iRYV6uPari3zHoqZlnuaR7V1bEiNMxikhp37rdBXbw==}
@@ -1903,12 +1935,12 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  msgpackr-extract@3.0.3:
-    resolution: {integrity: sha512-P0efT1C9jIdVRefqjzOQ9Xml57zpOXnIuS+csaB4MdZbTdmGDLo8XhzBG1N7aO11gKDDkJvBLULeFTo46wwreA==}
+  msgpackr-extract@3.0.4:
+    resolution: {integrity: sha512-4kmO/MdyUIkLIvTPr8VHLil4AtoKIoniWPIEk5+CDy0xnWC84azhSFmuJ7PxZdsYtiP5kEeQsORAVIeMgxT+Hw==}
     hasBin: true
 
-  msgpackr@1.11.10:
-    resolution: {integrity: sha512-iCZNq+HszvF+fC3anCm4nBmWEnbeIAfpDs6IStAEKhQ2YSgkjzVG2FF9XJqwwQh5bH3N9OUTUt4QwVN6MLMLtA==}
+  msgpackr@2.0.4:
+    resolution: {integrity: sha512-o1C5KRmuRt+apqMr1HuGSqWStZoRBUpEsCsl15uM9VdAF1qHLtvMOU2En747EnTyEl6c4pzPewRMFF31s1CNbA==}
 
   multipasta@0.2.7:
     resolution: {integrity: sha512-KPA58d68KgGil15oDqXjkUBEBYc00XvbPj5/X+dyzeo/lWm9Nc25pQRlf1D+gv4OpK7NM0J1odrbu9JNNGvynA==}
@@ -2581,8 +2613,8 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  uuid@13.0.2:
-    resolution: {integrity: sha512-vzi9uRZ926x4XV73S/4qQaTwPXM2JBj6/6lI/byHH1jOpCzb0zDbfytgA9LcN/hzb2l7WQSQnxITOVx5un/wGw==}
+  uuid@14.0.0:
+    resolution: {integrity: sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==}
     hasBin: true
 
   validate-npm-package-license@3.0.4:
@@ -2711,8 +2743,8 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
-  yaml@2.8.3:
-    resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -2735,9 +2767,6 @@ packages:
   yoctocolors@2.1.2:
     resolution: {integrity: sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==}
     engines: {node: '>=18'}
-
-  yoga-layout@3.2.1:
-    resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
 
   zod@4.1.8:
     resolution: {integrity: sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ==}
@@ -3130,22 +3159,22 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     optional: true
 
-  '@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.4':
     optional: true
 
-  '@msgpackr-extract/msgpackr-extract-linux-arm64@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-linux-arm64@3.0.4':
     optional: true
 
-  '@msgpackr-extract/msgpackr-extract-linux-arm@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-linux-arm@3.0.4':
     optional: true
 
-  '@msgpackr-extract/msgpackr-extract-linux-x64@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-linux-x64@3.0.4':
     optional: true
 
-  '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3':
+  '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
@@ -3221,61 +3250,79 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 27.0.0
 
-  '@opencode-ai/plugin@1.14.50(@opentui/core@0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/solid@0.2.10(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))':
+  '@opencode-ai/plugin@1.17.4(@opentui/core@0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/keymap@0.4.1(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))':
     dependencies:
-      '@opencode-ai/sdk': 1.14.50
-      effect: 4.0.0-beta.65
+      '@opencode-ai/sdk': 1.17.4
+      effect: 4.0.0-beta.74
       zod: 4.1.8
     optionalDependencies:
-      '@opentui/core': 0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10)
-      '@opentui/solid': 0.2.10(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/core': 0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/keymap': 0.4.1(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/solid': 0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
 
-  '@opencode-ai/sdk@1.14.50':
+  '@opencode-ai/sdk@1.17.4':
     dependencies:
       cross-spawn: 7.0.6
 
-  '@opentui/core-darwin-arm64@0.2.10':
+  '@opentui/core-darwin-arm64@0.4.1':
     optional: true
 
-  '@opentui/core-darwin-x64@0.2.10':
+  '@opentui/core-darwin-x64@0.4.1':
     optional: true
 
-  '@opentui/core-linux-arm64@0.2.10':
+  '@opentui/core-linux-arm64-musl@0.4.1':
     optional: true
 
-  '@opentui/core-linux-x64@0.2.10':
+  '@opentui/core-linux-arm64@0.4.1':
     optional: true
 
-  '@opentui/core-win32-arm64@0.2.10':
+  '@opentui/core-linux-x64-musl@0.4.1':
     optional: true
 
-  '@opentui/core-win32-x64@0.2.10':
+  '@opentui/core-linux-x64@0.4.1':
     optional: true
 
-  '@opentui/core@0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10)':
+  '@opentui/core-win32-arm64@0.4.1':
+    optional: true
+
+  '@opentui/core-win32-x64@0.4.1':
+    optional: true
+
+  '@opentui/core@0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10)':
     dependencies:
-      bun-ffi-structs: 0.2.2(typescript@5.9.3)
+      bun-ffi-structs: 0.2.3(typescript@5.9.3)
       diff: 9.0.0
       marked: 17.0.1
       string-width: 7.2.0
       strip-ansi: 7.1.2
       web-tree-sitter: 0.25.10
-      yoga-layout: 3.2.1
     optionalDependencies:
-      '@opentui/core-darwin-arm64': 0.2.10
-      '@opentui/core-darwin-x64': 0.2.10
-      '@opentui/core-linux-arm64': 0.2.10
-      '@opentui/core-linux-x64': 0.2.10
-      '@opentui/core-win32-arm64': 0.2.10
-      '@opentui/core-win32-x64': 0.2.10
+      '@opentui/core-darwin-arm64': 0.4.1
+      '@opentui/core-darwin-x64': 0.4.1
+      '@opentui/core-linux-arm64': 0.4.1
+      '@opentui/core-linux-arm64-musl': 0.4.1
+      '@opentui/core-linux-x64': 0.4.1
+      '@opentui/core-linux-x64-musl': 0.4.1
+      '@opentui/core-win32-arm64': 0.4.1
+      '@opentui/core-win32-x64': 0.4.1
     transitivePeerDependencies:
       - typescript
 
-  '@opentui/solid@0.2.10(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)':
+  '@opentui/keymap@0.4.1(@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10))(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)':
+    dependencies:
+      '@opentui/core': 0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10)
+    optionalDependencies:
+      '@opentui/solid': 0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      solid-js: 1.9.12
+    transitivePeerDependencies:
+      - typescript
+      - web-tree-sitter
+
+  '@opentui/solid@0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)':
     dependencies:
       '@babel/core': 7.28.0
       '@babel/preset-typescript': 7.27.1(@babel/core@7.28.0)
-      '@opentui/core': 0.2.10(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/core': 0.4.1(typescript@5.9.3)(web-tree-sitter@0.25.10)
       babel-plugin-module-resolver: 5.0.2
       babel-preset-solid: 1.9.12(@babel/core@7.28.0)(solid-js@1.9.12)
       entities: 7.0.1
@@ -3539,7 +3586,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3))
+      vitest: 4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0))
 
   '@vitest/expect@4.1.5':
     dependencies:
@@ -3550,13 +3597,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.5(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3))':
+  '@vitest/mocker@4.1.5(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.5
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3)
+      vite: 8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.5':
     dependencies:
@@ -3678,7 +3725,7 @@ snapshots:
       node-releases: 2.0.38
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
-  bun-ffi-structs@0.2.2(typescript@5.9.3):
+  bun-ffi-structs@0.2.3(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
 
@@ -3841,18 +3888,18 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  effect@4.0.0-beta.65:
+  effect@4.0.0-beta.74:
     dependencies:
       '@standard-schema/spec': 1.1.0
-      fast-check: 4.7.0
+      fast-check: 4.8.0
       find-my-way-ts: 0.1.6
-      ini: 6.0.0
+      ini: 7.0.0
       kubernetes-types: 1.30.0
-      msgpackr: 1.11.10
+      msgpackr: 2.0.4
       multipasta: 0.2.7
       toml: 4.1.1
-      uuid: 13.0.2
-      yaml: 2.8.3
+      uuid: 14.0.0
+      yaml: 2.9.0
 
   electron-to-chromium@1.5.344: {}
 
@@ -3990,7 +4037,7 @@ snapshots:
 
   expect-type@1.3.0: {}
 
-  fast-check@4.7.0:
+  fast-check@4.8.0:
     dependencies:
       pure-rand: 8.4.0
 
@@ -4169,7 +4216,7 @@ snapshots:
 
   ini@1.3.8: {}
 
-  ini@6.0.0: {}
+  ini@7.0.0: {}
 
   into-stream@7.0.0:
     dependencies:
@@ -4408,21 +4455,21 @@ snapshots:
 
   ms@2.1.3: {}
 
-  msgpackr-extract@3.0.3:
+  msgpackr-extract@3.0.4:
     dependencies:
       node-gyp-build-optional-packages: 5.2.2
     optionalDependencies:
-      '@msgpackr-extract/msgpackr-extract-darwin-arm64': 3.0.3
-      '@msgpackr-extract/msgpackr-extract-darwin-x64': 3.0.3
-      '@msgpackr-extract/msgpackr-extract-linux-arm': 3.0.3
-      '@msgpackr-extract/msgpackr-extract-linux-arm64': 3.0.3
-      '@msgpackr-extract/msgpackr-extract-linux-x64': 3.0.3
-      '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.3
+      '@msgpackr-extract/msgpackr-extract-darwin-arm64': 3.0.4
+      '@msgpackr-extract/msgpackr-extract-darwin-x64': 3.0.4
+      '@msgpackr-extract/msgpackr-extract-linux-arm': 3.0.4
+      '@msgpackr-extract/msgpackr-extract-linux-arm64': 3.0.4
+      '@msgpackr-extract/msgpackr-extract-linux-x64': 3.0.4
+      '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.4
     optional: true
 
-  msgpackr@1.11.10:
+  msgpackr@2.0.4:
     optionalDependencies:
-      msgpackr-extract: 3.0.3
+      msgpackr-extract: 3.0.4
 
   multipasta@0.2.7: {}
 
@@ -4595,13 +4642,13 @@ snapshots:
     dependencies:
       find-up: 3.0.0
 
-  postcss-load-config@6.0.1(postcss@8.5.14)(tsx@4.22.4)(yaml@2.8.3):
+  postcss-load-config@6.0.1(postcss@8.5.14)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
       lilconfig: 3.1.3
     optionalDependencies:
       postcss: 8.5.14
       tsx: 4.22.4
-      yaml: 2.8.3
+      yaml: 2.9.0
 
   postcss@8.5.14:
     dependencies:
@@ -4956,7 +5003,7 @@ snapshots:
   tslib@2.8.1:
     optional: true
 
-  tsup@8.5.1(postcss@8.5.14)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.8.3):
+  tsup@8.5.1(postcss@8.5.14)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0):
     dependencies:
       bundle-require: 5.1.0(esbuild@0.27.7)
       cac: 6.7.14
@@ -4967,7 +5014,7 @@ snapshots:
       fix-dts-default-cjs-exports: 1.0.1
       joycon: 3.1.1
       picocolors: 1.1.1
-      postcss-load-config: 6.0.1(postcss@8.5.14)(tsx@4.22.4)(yaml@2.8.3)
+      postcss-load-config: 6.0.1(postcss@8.5.14)(tsx@4.22.4)(yaml@2.9.0)
       resolve-from: 5.0.0
       rollup: 4.60.2
       source-map: 0.7.6
@@ -5029,14 +5076,14 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  uuid@13.0.2: {}
+  uuid@14.0.0: {}
 
   validate-npm-package-license@3.0.4:
     dependencies:
       spdx-correct: 3.2.0
       spdx-expression-parse: 3.0.1
 
-  vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3):
+  vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -5048,12 +5095,12 @@ snapshots:
       esbuild: 0.28.0
       fsevents: 2.3.3
       tsx: 4.22.4
-      yaml: 2.8.3
+      yaml: 2.9.0
 
-  vitest@4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3)):
+  vitest@4.1.5(@types/node@22.19.17)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.5
-      '@vitest/mocker': 4.1.5(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.5(vite@8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.5
       '@vitest/runner': 4.1.5
       '@vitest/snapshot': 4.1.5
@@ -5070,7 +5117,7 @@ snapshots:
       tinyexec: 1.1.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.8.3)
+      vite: 8.0.10(@types/node@22.19.17)(esbuild@0.28.0)(tsx@4.22.4)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.19.17
@@ -5105,7 +5152,7 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  yaml@2.8.3: {}
+  yaml@2.9.0: {}
 
   yargs-parser@20.2.9: {}
 
@@ -5132,7 +5179,5 @@ snapshots:
       yargs-parser: 21.1.1
 
   yoctocolors@2.1.2: {}
-
-  yoga-layout@3.2.1: {}
 
   zod@4.1.8: {}

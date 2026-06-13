@@ -57,15 +57,17 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.14.50 <2",
-    "@opentui/core": ">=0.2.10 <0.4",
-    "@opentui/solid": ">=0.2.10 <0.4",
+    "@opencode-ai/plugin": ">=1.17.4 <2",
+    "@opentui/core": ">=0.3.4 <0.5",
+    "@opentui/keymap": ">=0.3.4 <0.5",
+    "@opentui/solid": ">=0.3.4 <0.5",
     "solid-js": ">=1.9.12 <2"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.14.50",
-    "@opentui/core": "^0.2.10",
-    "@opentui/solid": "^0.2.10",
+    "@opencode-ai/plugin": "^1.17.4",
+    "@opentui/core": "^0.4.1",
+    "@opentui/keymap": "^0.4.1",
+    "@opentui/solid": "^0.4.1",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/github": "^11.0.6",
     "@semantic-release/npm": "^12.0.2",

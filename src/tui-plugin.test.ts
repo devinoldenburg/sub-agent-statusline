@@ -59,6 +59,10 @@ function createMockApi() {
   const api = {
     command: { register: vi.fn(() => vi.fn()) },
     keymap: { registerLayer: vi.fn(() => vi.fn()) },
+    mode: {
+      current: vi.fn(() => "insert"),
+      push: vi.fn(() => vi.fn()),
+    },
     route: {
       current: { name: "session", params: { sessionID: "ses_parent" } },
       navigate: vi.fn(),
@@ -164,7 +168,10 @@ describe("TUI plugin contract", () => {
     const homeRef = vi.fn();
     slots.home_prompt({ theme: createTheme() }, { workspace_id: "ws_1", ref: homeRef });
     expect(api.ui.Prompt).toHaveBeenLastCalledWith(
-      expect.objectContaining({ workspaceID: "ws_1", ref: expect.any(Function) }),
+      expect.objectContaining({ ref: expect.any(Function) }),
+    );
+    expect(api.ui.Prompt).not.toHaveBeenLastCalledWith(
+      expect.objectContaining({ workspaceID: "ws_1" }),
     );
 
     const onSubmit = vi.fn();

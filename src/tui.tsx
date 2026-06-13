@@ -175,7 +175,6 @@ type PromptRefProp =
   | { current?: TuiPromptRef | undefined }
   | undefined;
 type HomePromptProps = {
-  workspaceID?: string;
   workspace_id?: string;
   ref?: PromptRefProp;
   [key: string]: unknown;
@@ -2610,12 +2609,9 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
         return <HomeBottomStatus state={state} theme={ctx.theme.current} />;
       },
       home_prompt(_ctx: TuiSlotContext, props: HomePromptProps) {
+        const { workspace_id: _workspaceID, ...restProps } = props;
         const promptProps = {
-          ...props,
-          ...(props.workspaceID === undefined &&
-          props.workspace_id !== undefined
-            ? { workspaceID: props.workspace_id }
-            : {}),
+          ...restProps,
           ref: composePromptRef(props.ref),
         };
         const Prompt = api.ui?.Prompt;
