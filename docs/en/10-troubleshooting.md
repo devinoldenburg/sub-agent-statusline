@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This guide covers common issues when installing, using, or developing `opencode-subagent-statusline`.
+This guide covers common issues when installing, using, or developing `@devinoldenburg/opencode-subagent-statusline`.
 
 General strategy:
 
@@ -21,7 +21,7 @@ Minimal configuration:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-subagent-statusline"]
+  "plugin": ["@devinoldenburg/opencode-subagent-statusline"]
 }
 ```
 

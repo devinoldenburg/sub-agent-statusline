@@ -1,4 +1,5 @@
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -295,6 +296,33 @@ describe("state", () => {
     expect(resolveStatePath()).toBe(harness.statePath);
     expect(resolveTextPath(harness.statePath)).toBe(harness.textPath);
     expect(shouldPreserveStateOnStartup()).toBe(true);
+  });
+
+  it("uses the stable default runtime directory when no state path is set", () => {
+    const previousStatePath = process.env.OPENCODE_SUBAGENT_STATUSLINE_STATE;
+    const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+    const previousInstance = process.env.OPENCODE_SUBAGENT_STATUSLINE_INSTANCE;
+    try {
+      delete process.env.OPENCODE_SUBAGENT_STATUSLINE_STATE;
+      delete process.env.XDG_RUNTIME_DIR;
+      process.env.OPENCODE_SUBAGENT_STATUSLINE_INSTANCE = "package-scope-test";
+
+      expect(resolveStatePath()).toBe(
+        join(
+          tmpdir(),
+          "opencode-subagent-statusline",
+          "package-scope-test",
+          "state.json",
+        ),
+      );
+    } finally {
+      if (previousStatePath === undefined) delete process.env.OPENCODE_SUBAGENT_STATUSLINE_STATE;
+      else process.env.OPENCODE_SUBAGENT_STATUSLINE_STATE = previousStatePath;
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+      if (previousInstance === undefined) delete process.env.OPENCODE_SUBAGENT_STATUSLINE_INSTANCE;
+      else process.env.OPENCODE_SUBAGENT_STATUSLINE_INSTANCE = previousInstance;
+    }
   });
 
   it("saves and loads state safely, falling back on invalid JSON", async () => {

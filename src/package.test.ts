@@ -3,6 +3,7 @@ import packageJson from "../package.json" with { type: "json" };
 
 describe("package metadata", () => {
   it("uses independent repository metadata and expected exports", () => {
+    expect(packageJson.name).toBe("@devinoldenburg/opencode-subagent-statusline");
     expect(packageJson.version).toBe("0.8.0");
     expect(packageJson.repository.url).toBe(
       "https://github.com/devinoldenburg/sub-agent-statusline",

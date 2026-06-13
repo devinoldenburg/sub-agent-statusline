@@ -17,7 +17,7 @@ Minimal content:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-subagent-statusline"]
+  "plugin": ["@devinoldenburg/opencode-subagent-statusline"]
 }
 ```
 
@@ -176,7 +176,7 @@ This sets 1 hour. Avoid aggressive values except for diagnostics.
 Runtime entrypoint:
 
 ```txt
-opencode-subagent-statusline/runtime
+@devinoldenburg/opencode-subagent-statusline/runtime
 ```
 
 It exports `SubagentStatusline` from `src/index.ts`.

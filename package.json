@@ -1,5 +1,5 @@
 {
-  "name": "opencode-subagent-statusline",
+  "name": "@devinoldenburg/opencode-subagent-statusline",
   "version": "0.8.0",
   "description": "Production-ready OpenCode TUI plugin for subagent session status",
   "type": "module",

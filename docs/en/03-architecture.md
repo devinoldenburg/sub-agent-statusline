@@ -44,8 +44,8 @@ Source: `src/tui.tsx`
 This is the package's main entrypoint:
 
 ```txt
-opencode-subagent-statusline
-opencode-subagent-statusline/tui
+@devinoldenburg/opencode-subagent-statusline
+@devinoldenburg/opencode-subagent-statusline/tui
 ```
 
 Main responsibilities:
@@ -67,7 +67,7 @@ Source: `src/index.ts`
 Published as:
 
 ```txt
-opencode-subagent-statusline/runtime
+@devinoldenburg/opencode-subagent-statusline/runtime
 ```
 
 This is a lower-level mode. It does not render the TUI sidebar. Instead, it:

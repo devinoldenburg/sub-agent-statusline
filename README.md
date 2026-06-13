@@ -1,4 +1,4 @@
-# opencode-subagent-statusline
+# @devinoldenburg/opencode-subagent-statusline
 
 Independent OpenCode TUI plugin for tracking delegated subagent work in the sidebar and footer.
 
@@ -20,7 +20,7 @@ Add the plugin to your OpenCode TUI config:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-subagent-statusline"]
+  "plugin": ["@devinoldenburg/opencode-subagent-statusline"]
 }
 ```
 
@@ -89,9 +89,9 @@ Local TUI testing can load the built plugin directly:
 Package entrypoints:
 
 ```txt
-opencode-subagent-statusline          -> TUI plugin
-opencode-subagent-statusline/tui      -> TUI plugin
-opencode-subagent-statusline/runtime  -> runtime status writer
+@devinoldenburg/opencode-subagent-statusline          -> TUI plugin
+@devinoldenburg/opencode-subagent-statusline/tui      -> TUI plugin
+@devinoldenburg/opencode-subagent-statusline/runtime  -> runtime status writer
 ```
 
 ## Privacy And Persistence
