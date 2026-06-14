@@ -147,8 +147,6 @@ export function byPriority(a: ChildSessionState, b: ChildSessionState): number {
   return a.id.localeCompare(b.id);
 }
 
-const RECENT_DONE_VISIBLE_MS = 10 * 60 * 1000;
-
 function normalizeWorkItemTitle(value: string): string {
   return value
     .toLowerCase()
@@ -328,47 +326,48 @@ export function collapseSubagentWorkItems(
     );
 }
 
-export function isVisibleWorkItem(
-  child: ChildSessionState,
-  nowMs = Date.now(),
-): boolean {
-  if (child.status !== "done") return true;
-  const endedMs = Date.parse(child.endedAt ?? child.updatedAt);
-  if (Number.isNaN(endedMs)) return false;
-  return nowMs - endedMs <= RECENT_DONE_VISIBLE_MS;
+export function isVisibleWorkItem(child: ChildSessionState): boolean {
+  // Finished work hides as soon as it completes; it keeps counting in the
+  // aggregate via aggregateWorkItemCounts/totalExecuted. Running and error
+  // rows stay visible so active work and failures remain on screen.
+  return child.status !== "done";
 }
 
 export function visibleSubagentWorkItems(
   children: ChildSessionState[],
-  nowMs = Date.now(),
+  _nowMs = Date.now(),
 ): ChildSessionState[] {
-  const visible = collapseSubagentWorkItems(children).filter((child) =>
-    isVisibleWorkItem(child, nowMs),
-  );
-  const hasRunning = visible.some((child) => child.status === "running");
-  const activeMessageIDs = new Set(
-    visible
-      .filter((child) => child.status === "running" && child.messageID)
-      .map((child) => child.messageID as string),
-  );
+  return collapseSubagentWorkItems(children).filter(isVisibleWorkItem);
+}
 
-  if (!hasRunning) return visible;
+export interface WorkItemCounts {
+  running: number;
+  done: number;
+  error: number;
+}
 
-  return visible.filter((child) => {
-    if (child.status === "running" || child.status === "error") return true;
-    if (!child.messageID) return false;
-    return activeMessageIDs.has(child.messageID);
-  });
+/**
+ * Aggregate status counts over deduplicated work items, independent of row
+ * visibility. Finished subagents are hidden from the list but still tallied
+ * here so the stats line keeps reporting them.
+ */
+export function aggregateWorkItemCounts(
+  children: ChildSessionState[],
+): WorkItemCounts {
+  const counts: WorkItemCounts = { running: 0, done: 0, error: 0 };
+  for (const child of collapseSubagentWorkItems(children)) {
+    if (child.status === "running") counts.running += 1;
+    else if (child.status === "done") counts.done += 1;
+    else if (child.status === "error") counts.error += 1;
+  }
+  return counts;
 }
 
 export function renderStatusLine(state: StatuslineState): string {
   const symbols = currentSymbols();
-  const children = visibleSubagentWorkItems(Object.values(state.children)).sort(
-    byPriority,
-  );
-  const running = children.filter((c) => c.status === "running").length;
-  const done = children.filter((c) => c.status === "done").length;
-  const error = children.filter((c) => c.status === "error").length;
+  const allChildren = Object.values(state.children);
+  const children = visibleSubagentWorkItems(allChildren).sort(byPriority);
+  const { running, done, error } = aggregateWorkItemCounts(allChildren);
   const totalExecuted = formatNumber(state.totalExecuted ?? 0);
   const colorOn = colorsEnabled();
 

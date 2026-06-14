@@ -166,17 +166,16 @@ Esto evita ocultar trabajo real por una suposición incorrecta.
 
 ## Visibilidad de filas `done`
 
-El plugin no mantiene todas las finalizaciones visibles para siempre.
+El trabajo completado desaparece de la lista en cuanto termina.
 
 Reglas generales:
 
 - `running` se mantiene visible;
 - `error` se mantiene visible;
-- `done` reciente se mantiene visible por feedback;
-- `done` viejo puede ocultarse;
-- si hay trabajo activo, se priorizan filas relacionadas con ese trabajo.
+- `done` se oculta de inmediato al completarse;
+- el trabajo terminado sigue contando en el agregado (cantidad `done` y `total`).
 
-Esto mantiene la sidebar útil y evita que se convierta en un historial largo.
+Esto mantiene la sidebar enfocada en el trabajo activo y los errores, en vez de convertirla en un historial de finalizaciones.
 
 ## Relación con poda de estado
 
@@ -204,7 +203,7 @@ Ejemplo conceptual:
 El render textual incluye:
 
 - cantidad de running;
-- cantidad de done visibles;
+- cantidad de `done` (incluye trabajo terminado cuya fila está oculta);
 - cantidad de error;
 - total ejecutado;
 - detalles compactos por child visible;
@@ -260,7 +259,7 @@ La TUI usa su propio render visual, pero la normalización de estados/colores si
 
 ## Estados agregados
 
-El resumen agregado se basa en filas visibles y total semántico.
+El resumen agregado combina el trabajo conocido con el total semántico.
 
 Ejemplo:
 
@@ -270,9 +269,10 @@ Ejemplo:
 
 Importante:
 
-- `running`, `done` y `error` describen filas visibles o relevantes;
+- `running` y `error` reflejan las filas visibles;
+- `done` cuenta el trabajo completado aunque esas filas estén ocultas;
 - `total` viene del contador semántico;
-- el total puede ser mayor que la cantidad de filas visibles actuales.
+- tanto `done` como `total` pueden superar la cantidad de filas visibles.
 
 ## Casos donde ver menos filas es correcto
 
@@ -308,7 +308,7 @@ Total:
 
 Se conserva la fila con mejor título, pero se toma estado real de la sesión.
 
-### Caso C: done viejo
+### Caso C: trabajo terminado
 
 ```txt
 Estado:
@@ -319,10 +319,10 @@ Visible:
 - ses_running
 
 Total:
-- conserva historial ejecutado
+- conserva historial ejecutado y cuenta ses_old como done
 ```
 
-La finalización vieja se oculta para no ensuciar la vista.
+La finalización se oculta de la lista, pero sigue contando en el agregado.
 
 ## Casos donde no colapsar es correcto
 
@@ -370,8 +370,8 @@ Los tests de render protegen estos comportamientos:
 | -------------------- | ------------------------------------------------------------- |
 | `src/render.test.ts` | Collapse entre sintéticos y sesiones reales.                  |
 | `src/render.test.ts` | No colapsar wrappers genéricos sin correlación.               |
-| `src/render.test.ts` | Mantener visibles `done` recientes.                           |
-| `src/render.test.ts` | Ocultar históricos no relacionados cuando hay trabajo activo. |
+| `src/render.test.ts` | Ocultar filas `done` en cuanto terminan.                      |
+| `src/render.test.ts` | Contar el trabajo terminado en el agregado aunque esté oculto.|
 | `src/render.test.ts` | Orden estable.                                                |
 | `src/render.test.ts` | Formato agregado y `NO_COLOR`.                                |
 
@@ -390,7 +390,7 @@ Antes de tocar render o deduplicación, preguntate:
 - ¿El título visible sigue siendo el más útil para humanos?
 - ¿La sesión real sigue siendo navegable vía `targetSessionID`?
 - ¿Los errores siguen visibles?
-- ¿Los `done` recientes siguen dando feedback suficiente?
+- ¿El trabajo terminado sigue contando en el agregado aunque esté oculto?
 - ¿El total semántico sigue independiente de la cantidad de filas visibles?
 - ¿Agregué o actualicé tests de render si cambié una regla visual?
 
@@ -404,7 +404,7 @@ Sus responsabilidades son:
 - preservar información útil;
 - ocultar ruido técnico;
 - mantener errores y actividad visibles;
-- mostrar finalizaciones recientes sin convertir la sidebar en historial;
+- ocultar las finalizaciones de la lista pero seguir contándolas en el agregado;
 - mantener separado el total semántico de la cantidad de filas visibles.
 
 Esta separación es lo que permite que el plugin sea confiable aunque OpenCode emita la misma delegación como tool call, subtask y sesión real.

@@ -148,17 +148,16 @@ If there is no safe evidence that `tool:prt_task` corresponds to `ses_other`, re
 
 ## Visibility of `done` rows
 
-The plugin does not keep all completions visible forever.
+Completed work disappears from the list as soon as it finishes.
 
 General behavior:
 
 - `running` remains visible;
 - `error` remains visible;
-- recent `done` remains visible for feedback;
-- old `done` can be hidden;
-- active work prioritizes rows related to that work.
+- `done` is hidden immediately once it completes;
+- finished work keeps counting in the aggregate (`done` count and `total`).
 
-This keeps the sidebar useful instead of turning it into a long history.
+This keeps the sidebar focused on active work and failures instead of turning it into a history of completions.
 
 ## Visibility vs pruning
 
@@ -184,7 +183,7 @@ Conceptual example:
 Text rendering includes:
 
 - running count;
-- visible done count;
+- completed (`done`) count, including finished work whose rows are hidden;
 - error count;
 - total executed;
 - compact per-child details;
@@ -228,9 +227,10 @@ Aggregate output may look like:
 
 Important distinction:
 
-- `running`, `done`, and `error` describe visible or relevant rows;
+- `running` and `error` mirror the visible rows;
+- `done` counts completed work even though those rows are hidden;
 - `total` comes from semantic counters;
-- the total may be larger than the current visible row count.
+- both the `done` count and `total` can exceed the number of visible rows.
 
 ## When fewer rows are correct
 
@@ -238,7 +238,7 @@ Important distinction:
 | --- | --- |
 | `tool:prt_task` + `ses_child` | One real session row. |
 | `subtask:prt_1` + `ses_child` | One enriched subtask row. |
-| Old `done` plus active work | Active work visible; old done hidden. |
+| Finished work plus active work | Active work and errors visible; completed rows hidden but still counted. |
 
 ## When not collapsing is correct
 
@@ -266,8 +266,8 @@ It also applies UX rules:
 
 - collapse between synthetic rows and real sessions;
 - not collapsing generic wrappers without correlation;
-- keeping recent `done` rows visible;
-- hiding unrelated history when active work exists;
+- hiding `done` rows as soon as they finish;
+- counting finished work in the aggregate while its row is hidden;
 - stable ordering;
 - aggregate formatting and `NO_COLOR`.
 
@@ -282,7 +282,7 @@ Before changing rendering or deduplication, check:
 - Is the visible title still useful for humans?
 - Is the real session still navigable through `targetSessionID`?
 - Are errors still visible?
-- Do recent `done` rows still provide feedback?
+- Do finished rows still count in the aggregate even when hidden?
 - Is semantic total still independent of visible row count?
 - Did I add or update render tests for rule changes?
 

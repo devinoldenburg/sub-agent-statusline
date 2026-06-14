@@ -30,6 +30,7 @@ import type { Accessor } from "solid-js";
 import { applySubagentEvent, extractChildDetails } from "./events.js";
 import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
+  aggregateWorkItemCounts,
   byPriority,
   formatDuration,
   renderStatusLine,
@@ -1004,15 +1005,15 @@ function SidebarSubagents(props: {
     ).sort(byPriority),
   );
 
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of children()) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
-  });
+  const counts = createMemo(() =>
+    // Count all of this session's work, including finished rows hidden from the
+    // list, so the aggregate keeps reporting completions.
+    aggregateWorkItemCounts(
+      Object.values(props.state().children).filter(
+        (child) => child.parentID === props.sessionID,
+      ),
+    ),
+  );
   const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
 
   const visibleChildren = createMemo(() => {
@@ -1523,17 +1524,10 @@ function HomeBottomStatus(props: {
   theme: TuiThemeCurrent;
 }) {
   const symbols = currentSymbols();
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of visibleSubagentWorkItems(
-      Object.values(props.state().children),
-    )) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
-  });
+  const counts = createMemo(() =>
+    // Finished subagents are hidden from rows but still counted in the totals.
+    aggregateWorkItemCounts(Object.values(props.state().children)),
+  );
   const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
   const visible = createMemo(
     () => counts().running > 0 || counts().error > 0 || totalExecuted() > 0,

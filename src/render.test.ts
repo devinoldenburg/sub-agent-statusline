@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateWorkItemCounts,
   byPriority,
   collapseSubagentWorkItems,
   formatContext,
@@ -133,29 +134,35 @@ describe("render", () => {
     });
   });
 
-  it("keeps recent done items visible and hides stale done items", () => {
+  it("hides done items as soon as they finish while keeping running and error visible", () => {
     const now = Date.parse("2026-04-30T10:20:00.000Z");
-    const visibleDone = child({
+    const justFinished = child({
       id: "done_recent",
       status: "done",
       color: "green",
-      endedAt: "2026-04-30T10:15:00.000Z",
+      endedAt: "2026-04-30T10:19:59.000Z",
     });
-    const hiddenDone = child({
-      id: "done_old",
-      status: "done",
-      color: "green",
-      endedAt: "2026-04-30T10:00:00.000Z",
+    const stillRunning = child({
+      id: "running_now",
+      status: "running",
+      color: "yellow",
+    });
+    const failed = child({
+      id: "errored",
+      status: "error",
+      color: "red",
+      endedAt: "2026-04-30T10:18:00.000Z",
     });
 
     expect(
-      visibleSubagentWorkItems([visibleDone, hiddenDone], now).map(
-        (item) => item.id,
-      ),
-    ).toEqual(["done_recent"]);
+      visibleSubagentWorkItems(
+        [justFinished, stillRunning, failed],
+        now,
+      ).map((item) => item.id),
+    ).toEqual(["running_now", "errored"]);
   });
 
-  it("keeps active running work visible and deprioritizes unrelated done rows", () => {
+  it("hides every completed row regardless of active work in the same thread", () => {
     const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
     const children: ChildSessionState[] = [
       child({
@@ -189,13 +196,62 @@ describe("render", () => {
 
     const visible = visibleSubagentWorkItems(children, nowMs);
 
-    expect(visible.map((item) => item.id)).toEqual([
-      "subtask:active",
-      "subtask:active-done",
+    expect(visible.map((item) => item.id)).toEqual(["subtask:active"]);
+  });
+
+  it("counts finished work in the aggregate even though its row is hidden", () => {
+    const children: ChildSessionState[] = [
+      child({ id: "ses_running", status: "running" }),
+      child({
+        id: "ses_done_1",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:00:00.000Z",
+      }),
+      child({
+        id: "ses_done_2",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T09:00:00.000Z",
+      }),
+      child({ id: "ses_error", status: "error", color: "red" }),
+    ];
+
+    expect(visibleSubagentWorkItems(children).map((item) => item.id)).toEqual([
+      "ses_running",
+      "ses_error",
     ]);
-    expect(visible.some((item) => item.id === "subtask:historical")).toBe(
-      false,
-    );
+    expect(aggregateWorkItemCounts(children)).toEqual({
+      running: 1,
+      done: 2,
+      error: 1,
+    });
+  });
+
+  it("keeps the done count in the rendered statusline aggregate after rows hide", () => {
+    process.env.NO_COLOR = "1";
+    const state: StatuslineState = {
+      children: {
+        running: child({ id: "running", title: "Run tests", status: "running" }),
+        done: child({
+          id: "done",
+          title: "Finished work",
+          status: "done",
+          color: "green",
+          endedAt: "2026-04-30T10:00:00.000Z",
+        }),
+      },
+      countedChildIDs: { running: true, done: true },
+      totalExecuted: 2,
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    };
+
+    const line = renderStatusLine(state);
+    expect(line).toContain("-> 1 running | 1 done | 0 error | 2 total");
+    // The finished row is hidden from the per-child detail section.
+    expect(line).not.toContain("Finished work");
+    expect(line).toContain("Run tests");
+    delete process.env.NO_COLOR;
   });
 
   it("sorts ties by id for stable priority", () => {
