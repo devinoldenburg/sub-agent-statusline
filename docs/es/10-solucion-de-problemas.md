@@ -133,7 +133,7 @@ Casos normales:
 | Caso                                         | Por qué pasa                                    |
 | -------------------------------------------- | ----------------------------------------------- |
 | Hay más entradas internas que filas          | El render colapsó duplicados.                   |
-| El total es mayor que filas visibles         | Filas `done` viejas se ocultaron o podaron.     |
+| El total es mayor que filas visibles         | Filas terminadas viejas se podaron del estado.  |
 | Un wrapper aparece pero no suma              | `source: "tool"` es evidencia, no ejecución.    |
 | Un subtask y una sesión cuentan una sola vez | El contador se reconcilió hacia la sesión real. |
 

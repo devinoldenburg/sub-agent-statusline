@@ -147,6 +147,21 @@ export function byPriority(a: ChildSessionState, b: ChildSessionState): number {
   return a.id.localeCompare(b.id);
 }
 
+/**
+ * Float running work to the top of the list, then fall back to byPriority
+ * (newest first, stable id tie-break) within each group. Finished and errored
+ * rows follow the running ones instead of interleaving by start time.
+ */
+export function byRunningFirst(
+  a: ChildSessionState,
+  b: ChildSessionState,
+): number {
+  const aRank = a.status === "running" ? 0 : 1;
+  const bRank = b.status === "running" ? 0 : 1;
+  if (aRank !== bRank) return aRank - bRank;
+  return byPriority(a, b);
+}
+
 function normalizeWorkItemTitle(value: string): string {
   return value
     .toLowerCase()
@@ -326,18 +341,14 @@ export function collapseSubagentWorkItems(
     );
 }
 
-export function isVisibleWorkItem(child: ChildSessionState): boolean {
-  // Finished work hides as soon as it completes; it keeps counting in the
-  // aggregate via aggregateWorkItemCounts/totalExecuted. Running and error
-  // rows stay visible so active work and failures remain on screen.
-  return child.status !== "done";
-}
-
 export function visibleSubagentWorkItems(
   children: ChildSessionState[],
   _nowMs = Date.now(),
 ): ChildSessionState[] {
-  return collapseSubagentWorkItems(children).filter(isVisibleWorkItem);
+  // Every tracked subagent in the session stays listed; callers float the
+  // running ones to the top via byRunningFirst. Finished and errored work
+  // remains visible (and counted) instead of disappearing.
+  return collapseSubagentWorkItems(children);
 }
 
 export interface WorkItemCounts {
@@ -348,8 +359,8 @@ export interface WorkItemCounts {
 
 /**
  * Aggregate status counts over deduplicated work items, independent of row
- * visibility. Finished subagents are hidden from the list but still tallied
- * here so the stats line keeps reporting them.
+ * order and pruning. Counting here (rather than from a pre-sorted/limited view)
+ * keeps the stats line correct regardless of how rows are displayed.
  */
 export function aggregateWorkItemCounts(
   children: ChildSessionState[],
@@ -366,7 +377,7 @@ export function aggregateWorkItemCounts(
 export function renderStatusLine(state: StatuslineState): string {
   const symbols = currentSymbols();
   const allChildren = Object.values(state.children);
-  const children = visibleSubagentWorkItems(allChildren).sort(byPriority);
+  const children = visibleSubagentWorkItems(allChildren).sort(byRunningFirst);
   const { running, done, error } = aggregateWorkItemCounts(allChildren);
   const totalExecuted = formatNumber(state.totalExecuted ?? 0);
   const colorOn = colorsEnabled();

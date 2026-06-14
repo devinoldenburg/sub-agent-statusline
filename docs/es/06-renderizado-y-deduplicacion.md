@@ -72,11 +72,11 @@ Antes de renderizar, los items se ordenan para que lo más relevante aparezca pr
 
 Reglas generales:
 
-- items más nuevos primero;
-- `running` y `error` importan más que históricos viejos;
+- las filas `running` se llevan arriba de la lista (`byRunningFirst`);
+- dentro de cada grupo, los items más nuevos van primero;
 - tie-break por `id` para mantener orden estable.
 
-El orden estable evita que la UI salte de forma innecesaria cuando dos items tienen timestamps iguales.
+Llevar el trabajo activo arriba mantiene a los subagentes en ejecución siempre a la vista, mientras el trabajo terminado queda listado debajo. El orden estable evita que la UI salte de forma innecesaria cuando dos items tienen timestamps iguales.
 
 ## Collapse de work items
 
@@ -164,18 +164,18 @@ Si no hay evidencia segura de que `tool:prt_task` corresponde a `ses_other`, el 
 
 Esto evita ocultar trabajo real por una suposición incorrecta.
 
-## Visibilidad de filas `done`
+## Visibilidad y orden de las filas
 
-El trabajo completado desaparece de la lista en cuanto termina.
+Cada subagente registrado en la sesión sigue listado; nada se oculta al terminar.
 
 Reglas generales:
 
-- `running` se mantiene visible;
-- `error` se mantiene visible;
-- `done` se oculta de inmediato al completarse;
+- se muestran todos los subagentes (`running`, `done`, `error`);
+- las filas `running` se llevan arriba, las más nuevas primero;
+- las filas terminadas y con error van debajo, las más nuevas primero;
 - el trabajo terminado sigue contando en el agregado (cantidad `done` y `total`).
 
-Esto mantiene la sidebar enfocada en el trabajo activo y los errores, en vez de convertirla en un historial de finalizaciones.
+El trabajo activo siempre queda visible arriba, mientras el trabajo completado queda disponible debajo.
 
 ## Relación con poda de estado
 
@@ -203,7 +203,7 @@ Ejemplo conceptual:
 El render textual incluye:
 
 - cantidad de running;
-- cantidad de `done` (incluye trabajo terminado cuya fila está oculta);
+- cantidad de `done`;
 - cantidad de error;
 - total ejecutado;
 - detalles compactos por child visible;
@@ -269,10 +269,9 @@ Ejemplo:
 
 Importante:
 
-- `running` y `error` reflejan las filas visibles;
-- `done` cuenta el trabajo completado aunque esas filas estén ocultas;
+- `running`, `done` y `error` cuentan cada work item deduplicado, igual que las filas mostradas;
 - `total` viene del contador semántico;
-- tanto `done` como `total` pueden superar la cantidad de filas visibles.
+- `total` puede superar la cantidad de filas porque sobrevive al pruning.
 
 ## Casos donde ver menos filas es correcto
 
@@ -316,13 +315,14 @@ Estado:
 - ses_running running
 
 Visible:
-- ses_running
+- ses_running   (arriba)
+- ses_old       (debajo)
 
 Total:
 - conserva historial ejecutado y cuenta ses_old como done
 ```
 
-La finalización se oculta de la lista, pero sigue contando en el agregado.
+El trabajo terminado queda listado debajo del activo y sigue contando en el agregado.
 
 ## Casos donde no colapsar es correcto
 
@@ -370,8 +370,8 @@ Los tests de render protegen estos comportamientos:
 | -------------------- | ------------------------------------------------------------- |
 | `src/render.test.ts` | Collapse entre sintéticos y sesiones reales.                  |
 | `src/render.test.ts` | No colapsar wrappers genéricos sin correlación.               |
-| `src/render.test.ts` | Ocultar filas `done` en cuanto terminan.                      |
-| `src/render.test.ts` | Contar el trabajo terminado en el agregado aunque esté oculto.|
+| `src/render.test.ts` | Llevar las filas `running` arriba, las más nuevas primero.    |
+| `src/render.test.ts` | Listar el trabajo terminado debajo del activo y contarlo.     |
 | `src/render.test.ts` | Orden estable.                                                |
 | `src/render.test.ts` | Formato agregado y `NO_COLOR`.                                |
 
@@ -390,7 +390,7 @@ Antes de tocar render o deduplicación, preguntate:
 - ¿El título visible sigue siendo el más útil para humanos?
 - ¿La sesión real sigue siendo navegable vía `targetSessionID`?
 - ¿Los errores siguen visibles?
-- ¿El trabajo terminado sigue contando en el agregado aunque esté oculto?
+- ¿Las filas `running` se llevan arriba mientras las terminadas siguen listadas?
 - ¿El total semántico sigue independiente de la cantidad de filas visibles?
 - ¿Agregué o actualicé tests de render si cambié una regla visual?
 
@@ -404,7 +404,7 @@ Sus responsabilidades son:
 - preservar información útil;
 - ocultar ruido técnico;
 - mantener errores y actividad visibles;
-- ocultar las finalizaciones de la lista pero seguir contándolas en el agregado;
+- llevar el trabajo activo arriba y listar el trabajo terminado debajo, siempre contado;
 - mantener separado el total semántico de la cantidad de filas visibles.
 
 Esta separación es lo que permite que el plugin sea confiable aunque OpenCode emita la misma delegación como tool call, subtask y sesión real.

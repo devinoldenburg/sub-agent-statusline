@@ -60,11 +60,11 @@ Before rendering, items are ordered so the most relevant entries appear first.
 
 General rules:
 
-- newer items first;
-- `running` and `error` matter more than old history;
+- `running` rows are floated to the top of the list (`byRunningFirst`);
+- within each group, newer items come first;
 - ID tie-breakers keep ordering stable.
 
-Stable ordering prevents unnecessary UI jumping when timestamps match.
+Floating running work to the top keeps active subagents visible at a glance, while finished work stays listed below. Stable ordering prevents unnecessary UI jumping when timestamps match.
 
 ## Work item collapse
 
@@ -146,18 +146,18 @@ children = {
 
 If there is no safe evidence that `tool:prt_task` corresponds to `ses_other`, rendering must not collapse them.
 
-## Visibility of `done` rows
+## Visibility and ordering of rows
 
-Completed work disappears from the list as soon as it finishes.
+Every tracked subagent in the session stays listed; nothing is hidden when it finishes.
 
 General behavior:
 
-- `running` remains visible;
-- `error` remains visible;
-- `done` is hidden immediately once it completes;
+- all subagents (`running`, `done`, `error`) are shown;
+- `running` rows are floated to the top, newest first;
+- finished and errored rows follow, newest first;
 - finished work keeps counting in the aggregate (`done` count and `total`).
 
-This keeps the sidebar focused on active work and failures instead of turning it into a history of completions.
+Running work is always visible at the top, while completed work stays available below it.
 
 ## Visibility vs pruning
 
@@ -183,7 +183,7 @@ Conceptual example:
 Text rendering includes:
 
 - running count;
-- completed (`done`) count, including finished work whose rows are hidden;
+- completed (`done`) count;
 - error count;
 - total executed;
 - compact per-child details;
@@ -227,10 +227,9 @@ Aggregate output may look like:
 
 Important distinction:
 
-- `running` and `error` mirror the visible rows;
-- `done` counts completed work even though those rows are hidden;
+- `running`, `done`, and `error` count every deduplicated work item, matching the rows shown;
 - `total` comes from semantic counters;
-- both the `done` count and `total` can exceed the number of visible rows.
+- `total` can exceed the current row count because it survives pruning.
 
 ## When fewer rows are correct
 
@@ -238,7 +237,7 @@ Important distinction:
 | --- | --- |
 | `tool:prt_task` + `ses_child` | One real session row. |
 | `subtask:prt_1` + `ses_child` | One enriched subtask row. |
-| Finished work plus active work | Active work and errors visible; completed rows hidden but still counted. |
+| Finished work plus active work | Running rows on top; finished and errored rows listed below, still counted. |
 
 ## When not collapsing is correct
 
@@ -266,8 +265,8 @@ It also applies UX rules:
 
 - collapse between synthetic rows and real sessions;
 - not collapsing generic wrappers without correlation;
-- hiding `done` rows as soon as they finish;
-- counting finished work in the aggregate while its row is hidden;
+- floating running rows to the top, newest first (`byRunningFirst`);
+- listing finished work below running rows while still counting it;
 - stable ordering;
 - aggregate formatting and `NO_COLOR`.
 
@@ -282,7 +281,7 @@ Before changing rendering or deduplication, check:
 - Is the visible title still useful for humans?
 - Is the real session still navigable through `targetSessionID`?
 - Are errors still visible?
-- Do finished rows still count in the aggregate even when hidden?
+- Are running rows floated to the top while finished rows stay listed?
 - Is semantic total still independent of visible row count?
 - Did I add or update render tests for rule changes?
 

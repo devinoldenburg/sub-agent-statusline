@@ -32,6 +32,7 @@ import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
   aggregateWorkItemCounts,
   byPriority,
+  byRunningFirst,
   formatDuration,
   renderStatusLine,
   visibleSubagentWorkItems,
@@ -993,7 +994,7 @@ function SidebarSubagents(props: {
         (child) => child.parentID === props.sessionID,
       ),
       props.nowMs(),
-    ).sort(byPriority),
+    ).sort(byRunningFirst),
   );
 
   const otherChildren = createMemo(() =>
@@ -1002,12 +1003,12 @@ function SidebarSubagents(props: {
         (child) => child.parentID !== props.sessionID,
       ),
       props.nowMs(),
-    ).sort(byPriority),
+    ).sort(byRunningFirst),
   );
 
   const counts = createMemo(() =>
-    // Count all of this session's work, including finished rows hidden from the
-    // list, so the aggregate keeps reporting completions.
+    // Count all of this session's work directly from state so the aggregate
+    // stays correct regardless of row order or pruning.
     aggregateWorkItemCounts(
       Object.values(props.state().children).filter(
         (child) => child.parentID === props.sessionID,
@@ -1029,29 +1030,18 @@ function SidebarSubagents(props: {
   const visibleChildIDs = createMemo(() =>
     visibleChildren().map((child) => child.id),
   );
+  // Stable string key for the visible composition and order. It only changes
+  // when rows are added, removed, or reordered (for example when a running
+  // agent finishes and drops below the running group) - NOT on the per-second
+  // elapsed/token ticks that hand back fresh array references. The scroll
+  // restore effect depends on this key instead of the raw array so it stops
+  // firing every tick, which is what made the sidebar scroll jitter.
+  const visibleChildIDsKey = createMemo(() => visibleChildIDs().join("|"));
   const [selectedChildID, setSelectedChildID] = createSignal<
     string | undefined
   >();
   const [listFocused, setListFocused] = createSignal(false);
   const [listFocusModeActive, setListFocusModeActive] = createSignal(false);
-
-  const visibleChildLayoutSignature = createMemo(() =>
-    visibleChildren()
-      .map((child) =>
-        JSON.stringify([
-          child.id,
-          child.status,
-          child.title,
-          child.summary ?? "",
-          child.agentName ?? "",
-          child.tokens?.input ?? "",
-          child.tokens?.output ?? "",
-          child.tokens?.total ?? "",
-          child.tokens?.contextPercent ?? "",
-        ]),
-      )
-      .join("|"),
-  );
 
   const listHeight = createMemo(() => {
     const contentHeight =
@@ -1233,9 +1223,10 @@ function SidebarSubagents(props: {
   useKeyboard(handleListKeyDown);
 
   createEffect(() => {
+    // Only re-run when the row composition actually changes - not on every
+    // elapsed/token tick - so scroll position is preserved without jitter.
     props.expanded();
-    visibleChildIDs().join("|");
-    visibleChildLayoutSignature();
+    visibleChildIDsKey();
     showingOtherSessions();
     props.sidebarWidth?.();
 
@@ -1525,7 +1516,7 @@ function HomeBottomStatus(props: {
 }) {
   const symbols = currentSymbols();
   const counts = createMemo(() =>
-    // Finished subagents are hidden from rows but still counted in the totals.
+    // Aggregate counts come straight from state, independent of row display.
     aggregateWorkItemCounts(Object.values(props.state().children)),
   );
   const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);

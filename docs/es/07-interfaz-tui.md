@@ -53,11 +53,11 @@ Esto ayuda en dos casos:
 
 | Estado interno | Significado para la UI                                            |
 | -------------- | ----------------------------------------------------------------- |
-| `running`      | Trabajo activo o pendiente. Debe permanecer visible.              |
-| `done`         | Trabajo terminado recientemente. Puede ocultarse después.         |
-| `error`        | Trabajo fallido. Debe permanecer visible para llamar la atención. |
+| `running`      | Trabajo activo o pendiente. Se lleva arriba de la lista.          |
+| `done`         | Trabajo terminado. Se lista debajo de las filas en ejecución.     |
+| `error`        | Trabajo fallido. Se lista debajo de las filas en ejecución.       |
 
-La UI evita convertir la sidebar en un historial infinito. Por eso las filas `done` viejas pueden desaparecer aunque sigan habiendo contado para `totalExecuted`.
+Todos los subagentes de la sesión siguen listados: el trabajo en ejecución queda fijado arriba (los más nuevos primero) y el trabajo terminado debajo. Las filas terminadas solo se quitan por el pruning del estado, no por el render.
 
 ## Resumen en home
 
@@ -252,7 +252,7 @@ Para validar la TUI después de cambios:
 6. Probar `Alt+B`.
 7. Probar `j/k`, flechas y `Esc`.
 8. Si hay sesión navegable, probar `Enter`.
-9. Confirmar que completions recientes aparecen y luego no ensucian la vista.
+9. Confirmar que las completions aparecen debajo del trabajo en ejecución sin causar saltos de scroll.
 
 ## Archivos relacionados
 

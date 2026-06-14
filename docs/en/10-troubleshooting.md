@@ -131,7 +131,7 @@ This can also be correct.
 | Case | Why it happens |
 | --- | --- |
 | More internal entries than rows | Rendering collapsed duplicates. |
-| Total is larger than visible rows | Old `done` rows were hidden or pruned. |
+| Total is larger than visible rows | Old terminal rows were pruned from state. |
 | A wrapper appears but does not increment | `source: "tool"` is evidence, not execution. |
 | A subtask and session count once | Counter reconciled toward the real session. |
 

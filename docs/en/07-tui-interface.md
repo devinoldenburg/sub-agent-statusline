@@ -48,11 +48,11 @@ If there are no current-session subagents, or if relevant activity exists elsewh
 
 | Internal status | UI meaning |
 | --- | --- |
-| `running` | Active or pending work. Should remain visible. |
-| `done` | Recently completed work. May be hidden later. |
-| `error` | Failed work. Should remain visible. |
+| `running` | Active or pending work. Floated to the top of the list. |
+| `done` | Completed work. Listed below the running rows. |
+| `error` | Failed work. Listed below the running rows. |
 
-Old `done` rows may disappear so the sidebar does not become an infinite history.
+All of a session's subagents stay listed, with running work pinned at the top (newest first) and finished work below it. Terminal rows are only removed by state pruning, not by the renderer.
 
 ## Home summary
 
