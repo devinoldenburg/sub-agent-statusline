@@ -41,7 +41,7 @@ describe("render", () => {
     expect(formatContextCompact(withTokens)).toBe("1.5k ctx 12%");
   });
 
-  it("collapses synthetic work items with matching session children", () => {
+  it("collapses proxy work items into one canonical real session row", () => {
     const synthetic = child({
       id: "tool:part_1",
       title: "Investigate flaky tests",
@@ -61,7 +61,8 @@ describe("render", () => {
 
     expect(collapseSubagentWorkItems([synthetic, session])).toEqual([
       expect.objectContaining({
-        id: "tool:part_1",
+        id: "ses_child",
+        source: "session",
         status: "done",
         color: "green",
         targetSessionID: "ses_child",
@@ -70,7 +71,7 @@ describe("render", () => {
     ]);
   });
 
-  it("does not collapse a targetless generic task wrapper without correlation", () => {
+  it("hides a targetless generic task wrapper while keeping the real session", () => {
     const children: ChildSessionState[] = [
       child({
         id: "tool:sync-task",
@@ -90,12 +91,11 @@ describe("render", () => {
     ];
 
     expect(collapseSubagentWorkItems(children).map((item) => item.id)).toEqual([
-      "tool:sync-task",
       "ses_sync_child",
     ]);
   });
 
-  it("keeps multiple generic wrappers visible when they are the only representation", () => {
+  it("emits canonical session rows for multiple targeted generic proxies", () => {
     const children: ChildSessionState[] = [
       child({
         id: "tool:ping-1",
@@ -136,16 +136,24 @@ describe("render", () => {
     const collapsed = collapseSubagentWorkItems(children);
 
     expect(collapsed.map((item) => item.id)).toEqual([
-      "tool:ping-1",
-      "tool:ping-2",
+      "ses_ping_1",
+      "ses_ping_2",
     ]);
     expect(collapsed).toEqual([
-      expect.objectContaining({ status: "done", targetSessionID: "ses_ping_1" }),
-      expect.objectContaining({ status: "done", targetSessionID: "ses_ping_2" }),
+      expect.objectContaining({
+        source: "session",
+        status: "done",
+        targetSessionID: "ses_ping_1",
+      }),
+      expect.objectContaining({
+        source: "session",
+        status: "done",
+        targetSessionID: "ses_ping_2",
+      }),
     ]);
   });
 
-  it("shows retained generic completed rows when completed history is enabled", () => {
+  it("shows completed real session history without wrapper rows", () => {
     const now = Date.parse("2026-04-30T10:20:00.000Z");
     const children: ChildSessionState[] = [
       child({
@@ -188,7 +196,7 @@ describe("render", () => {
       visibleSubagentWorkItems(children, now, {
         showCompletedHistory: true,
       }).map((item) => item.id),
-    ).toEqual(["tool:old-ping-1", "tool:old-ping-2"]);
+    ).toEqual(["ses_old_ping_1", "ses_old_ping_2"]);
   });
 
   it("keeps one grouped row and avoids duplicate wrappers", () => {
@@ -208,6 +216,7 @@ describe("render", () => {
       }),
       child({
         id: "ses_child_1",
+        targetSessionID: "ses_child_1",
         title: "Implement grouping assertions (coder)",
         source: "session",
         messageID: "msg_1",
@@ -220,8 +229,9 @@ describe("render", () => {
 
     const collapsed = collapseSubagentWorkItems(children);
 
-    expect(collapsed.map((item) => item.id)).toEqual(["subtask:work_1"]);
+    expect(collapsed.map((item) => item.id)).toEqual(["ses_child_1"]);
     expect(collapsed[0]).toMatchObject({
+      source: "session",
       status: "done",
       color: "green",
       targetSessionID: "ses_child_1",
@@ -271,16 +281,18 @@ describe("render", () => {
     const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
     const children: ChildSessionState[] = [
       child({
-        id: "subtask:active",
+        id: "ses_active",
         title: "Long running active work",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_active",
         messageID: "msg_active",
         status: "running",
       }),
       child({
-        id: "subtask:active-done",
+        id: "ses_active_done",
         title: "Recent completion in active thread",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_active_done",
         messageID: "msg_active",
         status: "done",
         color: "green",
@@ -288,9 +300,10 @@ describe("render", () => {
         updatedAt: "2026-04-30T12:14:00.000Z",
       }),
       child({
-        id: "subtask:historical",
+        id: "ses_historical",
         title: "Historical completion",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_historical",
         messageID: "msg_old",
         status: "done",
         color: "green",
@@ -302,10 +315,10 @@ describe("render", () => {
     const visible = visibleSubagentWorkItems(children, nowMs);
 
     expect(visible.map((item) => item.id)).toEqual([
-      "subtask:active",
-      "subtask:active-done",
+      "ses_active",
+      "ses_active_done",
     ]);
-    expect(visible.some((item) => item.id === "subtask:historical")).toBe(
+    expect(visible.some((item) => item.id === "ses_historical")).toBe(
       false,
     );
   });
@@ -314,16 +327,18 @@ describe("render", () => {
     const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
     const children: ChildSessionState[] = [
       child({
-        id: "subtask:active",
+        id: "ses_active",
         title: "Long running active work",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_active",
         messageID: "msg_active",
         status: "running",
       }),
       child({
-        id: "subtask:active-done",
+        id: "ses_active_done",
         title: "Recent completion in active thread",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_active_done",
         messageID: "msg_active",
         status: "done",
         color: "green",
@@ -331,9 +346,10 @@ describe("render", () => {
         updatedAt: "2026-04-30T12:14:00.000Z",
       }),
       child({
-        id: "subtask:historical",
+        id: "ses_historical",
         title: "Historical completion",
-        source: "subtask",
+        source: "session",
+        targetSessionID: "ses_historical",
         messageID: "msg_old",
         status: "done",
         color: "green",
@@ -347,10 +363,26 @@ describe("render", () => {
     });
 
     expect(visible.map((item) => item.id)).toEqual([
-      "subtask:active",
-      "subtask:active-done",
-      "subtask:historical",
+      "ses_active",
+      "ses_active_done",
+      "ses_historical",
     ]);
+  });
+
+  it("hides targetless delegate wrappers before real-session evidence exists", () => {
+    const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
+    const wrapper = child({
+      id: "tool:delegate-wrapper",
+      title: "Delegation: inspect counters",
+      source: "tool",
+      toolName: "delegate",
+      targetSessionID: undefined,
+      messageID: "msg_delegate",
+      status: "running",
+    });
+
+    expect(collapseSubagentWorkItems([wrapper])).toEqual([]);
+    expect(visibleSubagentWorkItems([wrapper], nowMs)).toEqual([]);
   });
 
   it("sorts ties by id for stable priority", () => {
@@ -364,13 +396,15 @@ describe("render", () => {
     const state: StatuslineState = {
       children: {
         running: child({
-          id: "running",
+          id: "ses_running",
+          targetSessionID: "ses_running",
           title: "Run tests",
           status: "running",
           color: "yellow",
         }),
         error: child({
-          id: "error",
+          id: "ses_error",
+          targetSessionID: "ses_error",
           title: "Fix bug",
           status: "error",
           color: "red",

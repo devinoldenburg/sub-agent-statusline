@@ -56,6 +56,7 @@ type SubtaskChild = {
 };
 
 type ToolChild = SubtaskChild & {
+  toolName: "delegate" | "task";
   status: "running" | "done" | "error";
   endedAt?: string;
 };
@@ -584,6 +585,7 @@ function extractToolChild(event: EventLike): ToolChild | null {
     agentName: subagentType,
     parentID,
     messageID,
+    toolName: tool,
     targetSessionID,
     status,
     startedAt,

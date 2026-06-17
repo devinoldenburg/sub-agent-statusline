@@ -56,6 +56,7 @@ import {
 } from "./tui-focus.js";
 import {
   createEmptyState,
+  countHistoricalSubagentExecutions,
   markChildStatus,
   refreshDerivedFields,
   resolveStatePath,
@@ -65,6 +66,7 @@ import {
   upsertChildDetails,
   type ChildTokenState,
   type ChildSessionState,
+  type StatusCounts,
   type StatuslineState,
 } from "./state.js";
 import { registerSubagentCommands } from "./tui-commands.js";
@@ -639,7 +641,7 @@ function resolveSyntheticTargetFromHydratedState(
   return undefined;
 }
 
-function backfillHydratedTargetSessionIDs(
+export function backfillHydratedTargetSessionIDs(
   state: StatuslineState,
   parentSessionID: string,
 ): boolean {
@@ -935,6 +937,66 @@ function subagentRowHeight(child: ChildSessionState): number {
     : SUBAGENTS_TERMINAL_ROW_HEIGHT;
 }
 
+export interface TuiSubagentSnapshot {
+  visibleChildren: ChildSessionState[];
+  visibleCounts: StatusCounts;
+  totalExecuted: number;
+  showingOtherSessions: boolean;
+}
+
+function countVisibleChildren(children: ChildSessionState[]): StatusCounts {
+  const result: StatusCounts = { running: 0, done: 0, error: 0 };
+  for (const child of children) {
+    if (child.status === "running") result.running += 1;
+    if (child.status === "done") result.done += 1;
+    if (child.status === "error") result.error += 1;
+  }
+  return result;
+}
+
+export function resolveTuiSubagentSnapshot(input: {
+  state: StatuslineState;
+  sessionID?: string;
+  nowMs?: number;
+  showCompletedHistory?: boolean;
+  fallbackToOtherSessions?: boolean;
+}): TuiSubagentSnapshot {
+  const allChildren = Object.values(input.state.children);
+  const options = { showCompletedHistory: input.showCompletedHistory };
+  const nowMs = input.nowMs ?? Date.now();
+  const ownChildren = input.sessionID
+    ? allChildren.filter((child) => child.parentID === input.sessionID)
+    : allChildren;
+  const ownVisibleChildren = visibleSubagentWorkItems(
+    ownChildren,
+    nowMs,
+    options,
+  ).sort(byPriority);
+  const otherVisibleChildren =
+    input.sessionID && input.fallbackToOtherSessions
+      ? visibleSubagentWorkItems(
+          allChildren.filter((child) => child.parentID !== input.sessionID),
+          nowMs,
+          options,
+        ).sort(byPriority)
+      : [];
+  const showingOtherSessions =
+    ownVisibleChildren.length === 0 && otherVisibleChildren.length > 0;
+  const visibleChildren = showingOtherSessions
+    ? otherVisibleChildren
+    : ownVisibleChildren;
+
+  return {
+    visibleChildren,
+    visibleCounts: countVisibleChildren(visibleChildren),
+    totalExecuted: countHistoricalSubagentExecutions({
+      children: allChildren,
+      parentSessionID: input.sessionID,
+    }),
+    showingOtherSessions,
+  };
+}
+
 function SidebarSubagents(props: {
   api: TuiPluginApi;
   sessionID: string;
@@ -957,46 +1019,19 @@ function SidebarSubagents(props: {
   const completedHistoryOptions = () => ({
     showCompletedHistory: showCompletedHistory(),
   });
-  const children = createMemo(() =>
-    visibleSubagentWorkItems(
-      Object.values(props.state().children).filter(
-        (child) => child.parentID === props.sessionID,
-      ),
-      props.nowMs(),
-      completedHistoryOptions(),
-    ).sort(byPriority),
+  const snapshot = createMemo(() =>
+    resolveTuiSubagentSnapshot({
+      state: props.state(),
+      sessionID: props.sessionID,
+      nowMs: props.nowMs(),
+      ...completedHistoryOptions(),
+      fallbackToOtherSessions: true,
+    }),
   );
-
-  const otherChildren = createMemo(() =>
-    visibleSubagentWorkItems(
-      Object.values(props.state().children).filter(
-        (child) => child.parentID !== props.sessionID,
-      ),
-      props.nowMs(),
-      completedHistoryOptions(),
-    ).sort(byPriority),
-  );
-
-  const visibleChildren = createMemo(() => {
-    const ownChildren = children();
-    if (ownChildren.length > 0) return ownChildren;
-    return otherChildren();
-  });
-
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of visibleChildren()) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
-  });
-  const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
-
-  const showingOtherSessions = createMemo(
-    () => children().length === 0 && otherChildren().length > 0,
-  );
+  const visibleChildren = createMemo(() => snapshot().visibleChildren);
+  const counts = createMemo(() => snapshot().visibleCounts);
+  const totalExecuted = createMemo(() => snapshot().totalExecuted);
+  const showingOtherSessions = createMemo(() => snapshot().showingOtherSessions);
 
   const visibleChildIDs = createMemo(() =>
     visibleChildren().map((child) => child.id),
@@ -1492,18 +1527,11 @@ function HomeBottomStatus(props: {
   state: () => StatuslineState;
   theme: TuiThemeCurrent;
 }) {
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of visibleSubagentWorkItems(
-      Object.values(props.state().children),
-    )) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
-  });
-  const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
+  const snapshot = createMemo(() =>
+    resolveTuiSubagentSnapshot({ state: props.state() }),
+  );
+  const counts = createMemo(() => snapshot().visibleCounts);
+  const totalExecuted = createMemo(() => snapshot().totalExecuted);
   const visible = createMemo(
     () => counts().running > 0 || counts().error > 0 || totalExecuted() > 0,
   );

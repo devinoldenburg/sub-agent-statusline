@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createEmptyState,
+  countHistoricalSubagentExecutions,
   getCounts,
+  isVisibleSubagentCounterEligible,
   loadState,
   markChildStatus,
   pruneTerminalChildren,
@@ -76,7 +78,7 @@ describe("state", () => {
     });
     expect(state.totalExecuted).toBe(0);
     expect(state.countedChildIDs["tool:part_1"]).toBeUndefined();
-    expect(getCounts(state)).toEqual({ running: 0, done: 1, error: 0 });
+    expect(getCounts(state)).toEqual({ running: 0, done: 0, error: 0 });
   });
 
   it("keeps non-zero-duration tool wrappers uncounted", () => {
@@ -155,7 +157,7 @@ describe("state", () => {
     expect(state.countedChildIDs["tool:part_1"]).toBeUndefined();
   });
 
-  it("counts subtask fallback only when it has no matching counted session", () => {
+  it("keeps subtask wrappers uncounted and counts only real sessions", () => {
     const state = createEmptyState();
 
     upsertRunningChild(state, {
@@ -165,8 +167,8 @@ describe("state", () => {
       messageID: "msg_1",
       source: "subtask",
     });
-    expect(state.totalExecuted).toBe(1);
-    expect(state.countedChildIDs["subtask:part_1"]).toBe(true);
+    expect(state.totalExecuted).toBe(0);
+    expect(state.countedChildIDs["subtask:part_1"]).toBeUndefined();
 
     upsertRunningChild(state, {
       id: "ses_other",
@@ -184,12 +186,12 @@ describe("state", () => {
       targetSessionID: "ses_other",
     });
 
-    expect(state.totalExecuted).toBe(2);
+    expect(state.totalExecuted).toBe(1);
     expect(state.countedChildIDs.ses_other).toBe(true);
     expect(state.countedChildIDs["subtask:part_2"]).toBeUndefined();
   });
 
-  it("rekeys counted subtask fallback when the matching session appears", () => {
+  it("ignores a targetless subtask until a matching real session appears", () => {
     const state = createEmptyState();
 
     upsertRunningChild(state, {
@@ -199,8 +201,8 @@ describe("state", () => {
       messageID: "msg_1",
       source: "subtask",
     });
-    expect(state.totalExecuted).toBe(1);
-    expect(state.countedChildIDs["subtask:part_1"]).toBe(true);
+    expect(state.totalExecuted).toBe(0);
+    expect(state.countedChildIDs["subtask:part_1"]).toBeUndefined();
 
     upsertRunningChild(state, {
       id: "ses_child",
@@ -215,7 +217,7 @@ describe("state", () => {
     expect(state.countedChildIDs["subtask:part_1"]).toBeUndefined();
   });
 
-  it("reconciles counted subtask fallback when details add a target session", () => {
+  it("does not count a subtask proxy when details add a target session", () => {
     const state = createEmptyState();
 
     upsertRunningChild(state, {
@@ -225,7 +227,7 @@ describe("state", () => {
       messageID: "msg_1",
       source: "subtask",
     });
-    expect(state.totalExecuted).toBe(1);
+    expect(state.totalExecuted).toBe(0);
 
     expect(
       upsertChildDetails(state, "subtask:part_1", {
@@ -233,9 +235,84 @@ describe("state", () => {
       }),
     ).toBe(true);
 
-    expect(state.totalExecuted).toBe(1);
-    expect(state.countedChildIDs.ses_child).toBe(true);
+    expect(state.totalExecuted).toBe(0);
+    expect(state.countedChildIDs.ses_child).toBeUndefined();
     expect(state.countedChildIDs["subtask:part_1"]).toBeUndefined();
+  });
+
+  it("classifies visible counter eligibility by real execution semantics", () => {
+    expect(
+      isVisibleSubagentCounterEligible(
+        child({ title: "Delegation: still real", source: "session" }),
+      ),
+    ).toBe(true);
+    expect(
+      isVisibleSubagentCounterEligible(
+        child({
+          id: "tool:delegate",
+          source: "tool",
+          toolName: "delegate",
+          targetSessionID: undefined,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isVisibleSubagentCounterEligible(
+        child({
+          id: "subtask:proxy",
+          source: "subtask",
+          targetSessionID: "ses_child",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("counts historical executions as unique real session identities", () => {
+    const children: ChildSessionState[] = [
+      child({
+        id: "tool:wrapper",
+        source: "tool",
+        toolName: "delegate",
+        targetSessionID: undefined,
+      }),
+      child({
+        id: "tool:proxy",
+        source: "tool",
+        toolName: "task",
+        targetSessionID: "ses_real_one",
+        messageID: "msg_1",
+      }),
+      child({
+        id: "ses_real_one",
+        source: "session",
+        targetSessionID: "ses_real_one",
+        messageID: "msg_1",
+        status: "done",
+        color: "green",
+      }),
+      child({
+        id: "ses_real_two",
+        source: "session",
+        targetSessionID: "ses_real_two",
+        messageID: "msg_2",
+        status: "error",
+        color: "red",
+      }),
+    ];
+
+    expect(countHistoricalSubagentExecutions({ children })).toBe(2);
+    expect(
+      countHistoricalSubagentExecutions({
+        children,
+        parentSessionID: "ses_parent",
+      }),
+    ).toBe(2);
+    expect(
+      countHistoricalSubagentExecutions({
+        children,
+        parentSessionID: "ses_other_parent",
+      }),
+    ).toBe(0);
   });
 
   it("merges details, sanitizes tokens, and refreshes elapsed fields", () => {
@@ -344,7 +421,7 @@ describe("state", () => {
     ).toBe(false);
   });
 
-  it("does not add newly loaded tool wrappers while preserving historical tool counts", async () => {
+  it("drops loaded tool wrapper counts because wrappers are not executions", async () => {
     const harness = await createRuntimeHarness();
     await writeFile(
       harness.statePath,
@@ -370,8 +447,8 @@ describe("state", () => {
 
     const loaded = await loadState(harness.statePath);
 
-    expect(loaded.totalExecuted).toBe(1);
-    expect(loaded.countedChildIDs["tool:old"]).toBe(true);
+    expect(loaded.totalExecuted).toBe(0);
+    expect(loaded.countedChildIDs["tool:old"]).toBeUndefined();
     expect(loaded.countedChildIDs["tool:new"]).toBeUndefined();
   });
 
@@ -396,7 +473,7 @@ describe("state", () => {
     expect(loaded.totalExecuted).toBe(1);
   });
 
-  it("rekeys historical counted subtasks to their loaded target session ids", async () => {
+  it("drops historical counted subtask proxies when no real session row exists", async () => {
     const harness = await createRuntimeHarness();
     await writeFile(
       harness.statePath,
@@ -417,12 +494,12 @@ describe("state", () => {
 
     const loaded = await loadState(harness.statePath);
 
-    expect(loaded.totalExecuted).toBe(1);
-    expect(loaded.countedChildIDs.ses_child).toBe(true);
+    expect(loaded.totalExecuted).toBe(0);
+    expect(loaded.countedChildIDs.ses_child).toBeUndefined();
     expect(loaded.countedChildIDs["subtask:old"]).toBeUndefined();
   });
 
-  it("deduplicates historical subtask and target ids that were both counted", async () => {
+  it("drops historical subtask proxy counts even when target ids were persisted", async () => {
     const harness = await createRuntimeHarness();
     await writeFile(
       harness.statePath,
@@ -443,8 +520,8 @@ describe("state", () => {
 
     const loaded = await loadState(harness.statePath);
 
-    expect(loaded.totalExecuted).toBe(1);
-    expect(loaded.countedChildIDs.ses_child).toBe(true);
+    expect(loaded.totalExecuted).toBe(0);
+    expect(loaded.countedChildIDs.ses_child).toBeUndefined();
     expect(loaded.countedChildIDs["subtask:old"]).toBeUndefined();
   });
 });
