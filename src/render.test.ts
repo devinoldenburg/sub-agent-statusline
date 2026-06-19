@@ -261,6 +261,134 @@ describe("render", () => {
     ).toEqual(["done_recent"]);
   });
 
+  it("applies done-row recency parity to stale and recent error rows", () => {
+    const now = Date.parse("2026-04-30T10:20:00.000Z");
+    const recentError = child({
+      id: "error_recent",
+      targetSessionID: "error_recent",
+      messageID: "msg_error_recent",
+      status: "error",
+      color: "red",
+      endedAt: "2026-04-30T10:15:00.000Z",
+      updatedAt: "2026-04-30T10:15:00.000Z",
+    });
+    const staleError = child({
+      id: "error_old",
+      targetSessionID: "error_old",
+      messageID: "msg_error_old",
+      status: "error",
+      color: "red",
+      endedAt: undefined,
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    });
+    const staleDone = child({
+      id: "done_old",
+      targetSessionID: "done_old",
+      messageID: "msg_done_old",
+      status: "done",
+      color: "green",
+      endedAt: "2026-04-30T10:00:00.000Z",
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    });
+
+    expect(
+      visibleSubagentWorkItems([recentError, staleError, staleDone], now).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["error_recent"]);
+  });
+
+  it("keeps running work visible without re-admitting stale error rows", () => {
+    const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
+    const children: ChildSessionState[] = [
+      child({
+        id: "ses_active",
+        title: "Long running active work",
+        source: "session",
+        targetSessionID: "ses_active",
+        messageID: "msg_active",
+        status: "running",
+      }),
+      child({
+        id: "ses_error_old",
+        title: "Historical failure",
+        source: "session",
+        targetSessionID: "ses_error_old",
+        messageID: "msg_old",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T12:00:00.000Z",
+        updatedAt: "2026-04-30T12:00:00.000Z",
+      }),
+    ];
+
+    expect(
+      visibleSubagentWorkItems(children, nowMs).map((item) => item.id),
+    ).toEqual(["ses_active"]);
+  });
+
+  it("keeps unrelated recent terminal rows hidden while active work is running", () => {
+    const nowMs = Date.parse("2026-04-30T12:15:00.000Z");
+    const children: ChildSessionState[] = [
+      child({
+        id: "ses_active",
+        title: "Long running active work",
+        source: "session",
+        targetSessionID: "ses_active",
+        messageID: "msg_active",
+        status: "running",
+      }),
+      child({
+        id: "ses_active_done",
+        title: "Active thread completion",
+        source: "session",
+        targetSessionID: "ses_active_done",
+        messageID: "msg_active",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T12:14:00.000Z",
+        updatedAt: "2026-04-30T12:14:00.000Z",
+      }),
+      child({
+        id: "ses_active_error",
+        title: "Active thread failure",
+        source: "session",
+        targetSessionID: "ses_active_error",
+        messageID: "msg_active",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T12:14:30.000Z",
+        updatedAt: "2026-04-30T12:14:30.000Z",
+      }),
+      child({
+        id: "ses_unrelated_error_recent",
+        title: "Recent unrelated failure",
+        source: "session",
+        targetSessionID: "ses_unrelated_error_recent",
+        messageID: "msg_other",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T12:14:45.000Z",
+        updatedAt: "2026-04-30T12:14:45.000Z",
+      }),
+      child({
+        id: "ses_unrelated_done_recent",
+        title: "Recent unrelated completion",
+        source: "session",
+        targetSessionID: "ses_unrelated_done_recent",
+        messageID: "msg_other",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T12:14:45.000Z",
+        updatedAt: "2026-04-30T12:14:45.000Z",
+      }),
+    ];
+
+    expect(
+      visibleSubagentWorkItems(children, nowMs).map((item) => item.id),
+    ).toEqual(["ses_active", "ses_active_done", "ses_active_error"]);
+  });
+
   it("shows stale done items when completed history is enabled", () => {
     const now = Date.parse("2026-04-30T10:20:00.000Z");
     const hiddenDone = child({
@@ -275,6 +403,35 @@ describe("render", () => {
         showCompletedHistory: true,
       }).map((item) => item.id),
     ).toEqual(["done_old"]);
+  });
+
+  it("shows retained stale done and error rows only when completed history is enabled", () => {
+    const now = Date.parse("2026-04-30T10:20:00.000Z");
+    const staleDone = child({
+      id: "done_old_history",
+      targetSessionID: "done_old_history",
+      messageID: "msg_done_old_history",
+      status: "done",
+      color: "green",
+      endedAt: "2026-04-30T10:00:00.000Z",
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    });
+    const staleError = child({
+      id: "error_old_history",
+      targetSessionID: "error_old_history",
+      messageID: "msg_error_old_history",
+      status: "error",
+      color: "red",
+      endedAt: "2026-04-30T10:00:00.000Z",
+      updatedAt: "2026-04-30T10:00:00.000Z",
+    });
+
+    expect(visibleSubagentWorkItems([staleDone, staleError], now)).toEqual([]);
+    expect(
+      visibleSubagentWorkItems([staleDone, staleError], now, {
+        showCompletedHistory: true,
+      }).map((item) => item.id),
+    ).toEqual(["done_old_history", "error_old_history"]);
   });
 
   it("keeps active running work visible and deprioritizes unrelated done rows", () => {
@@ -408,6 +565,7 @@ describe("render", () => {
           title: "Fix bug",
           status: "error",
           color: "red",
+          updatedAt: new Date().toISOString(),
         }),
       },
       countedChildIDs: { running: true, error: true },
@@ -420,5 +578,61 @@ describe("render", () => {
     );
     expect(renderStatusLine(state)).toContain("Run tests 01:01");
     expect(renderStatusLine(state)).not.toContain("\u001B[");
+  });
+
+  it("renders retained terminal status counts while active rows stay filtered", () => {
+    process.env.NO_COLOR = "1";
+    const terminalDone = Array.from({ length: 6 }, (_, index) =>
+      child({
+        id: `ses_done_${index}`,
+        targetSessionID: `ses_done_${index}`,
+        messageID: `msg_done_${index}`,
+        title: `Retained done ${index}`,
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:00:00.000Z",
+        updatedAt: "2026-04-30T10:00:00.000Z",
+      }),
+    );
+    const terminalErrors = Array.from({ length: 7 }, (_, index) =>
+      child({
+        id: `ses_error_${index}`,
+        targetSessionID: `ses_error_${index}`,
+        messageID: `msg_error_${index}`,
+        title: `Retained error ${index}`,
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:00:00.000Z",
+        updatedAt: "2026-04-30T10:00:00.000Z",
+      }),
+    );
+    const state: StatuslineState = {
+      children: Object.fromEntries(
+        [
+          child({
+            id: "ses_running",
+            targetSessionID: "ses_running",
+            messageID: "msg_running",
+            title: "Active work",
+            status: "running",
+            color: "yellow",
+          }),
+          ...terminalDone,
+          ...terminalErrors,
+        ].map((item) => [item.id, item]),
+      ),
+      countedChildIDs: {},
+      totalExecuted: 13,
+      updatedAt: "2026-04-30T10:20:00.000Z",
+    };
+
+    const statusLine = renderStatusLine(state);
+
+    expect(statusLine).toContain(
+      "↳ 1 running · 6 done · 7 error · Σ 13 total",
+    );
+    expect(statusLine).toContain("Active work 01:01");
+    expect(statusLine).not.toContain("Retained done 0");
+    expect(statusLine).not.toContain("Retained error 0");
   });
 });

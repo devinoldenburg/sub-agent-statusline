@@ -57,6 +57,7 @@ import {
 import {
   createEmptyState,
   countHistoricalSubagentExecutions,
+  countRetainedSubagentStatuses,
   markChildStatus,
   refreshDerivedFields,
   resolveStatePath,
@@ -944,16 +945,6 @@ export interface TuiSubagentSnapshot {
   showingOtherSessions: boolean;
 }
 
-function countVisibleChildren(children: ChildSessionState[]): StatusCounts {
-  const result: StatusCounts = { running: 0, done: 0, error: 0 };
-  for (const child of children) {
-    if (child.status === "running") result.running += 1;
-    if (child.status === "done") result.done += 1;
-    if (child.status === "error") result.error += 1;
-  }
-  return result;
-}
-
 export function resolveTuiSubagentSnapshot(input: {
   state: StatuslineState;
   sessionID?: string;
@@ -967,6 +958,9 @@ export function resolveTuiSubagentSnapshot(input: {
   const ownChildren = input.sessionID
     ? allChildren.filter((child) => child.parentID === input.sessionID)
     : allChildren;
+  const otherChildren = input.sessionID
+    ? allChildren.filter((child) => child.parentID !== input.sessionID)
+    : [];
   const ownVisibleChildren = visibleSubagentWorkItems(
     ownChildren,
     nowMs,
@@ -974,25 +968,33 @@ export function resolveTuiSubagentSnapshot(input: {
   ).sort(byPriority);
   const otherVisibleChildren =
     input.sessionID && input.fallbackToOtherSessions
-      ? visibleSubagentWorkItems(
-          allChildren.filter((child) => child.parentID !== input.sessionID),
-          nowMs,
-          options,
-        ).sort(byPriority)
+      ? visibleSubagentWorkItems(otherChildren, nowMs, options).sort(byPriority)
       : [];
+  const ownTotalExecuted = countHistoricalSubagentExecutions({
+    children: allChildren,
+    parentSessionID: input.sessionID,
+  });
   const showingOtherSessions =
-    ownVisibleChildren.length === 0 && otherVisibleChildren.length > 0;
+    ownVisibleChildren.length === 0 &&
+    ownTotalExecuted === 0 &&
+    otherVisibleChildren.length > 0;
   const visibleChildren = showingOtherSessions
     ? otherVisibleChildren
     : ownVisibleChildren;
+  const retainedCountChildren = showingOtherSessions
+    ? otherChildren
+    : allChildren;
+  const totalExecuted = showingOtherSessions
+    ? countHistoricalSubagentExecutions({ children: otherChildren })
+    : ownTotalExecuted;
 
   return {
     visibleChildren,
-    visibleCounts: countVisibleChildren(visibleChildren),
-    totalExecuted: countHistoricalSubagentExecutions({
-      children: allChildren,
-      parentSessionID: input.sessionID,
+    visibleCounts: countRetainedSubagentStatuses({
+      children: retainedCountChildren,
+      parentSessionID: showingOtherSessions ? undefined : input.sessionID,
     }),
+    totalExecuted,
     showingOtherSessions,
   };
 }

@@ -39,6 +39,210 @@ function stateWith(children: ChildSessionState[]): StatuslineState {
 }
 
 describe("TUI subagent snapshots", () => {
+  it("keeps retained terminal counters separate from default visible rows", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const retainedDone = Array.from({ length: 6 }, (_, index) =>
+      child({
+        id: `ses_done_${index}`,
+        title: `Retained done ${index}`,
+        source: "session",
+        targetSessionID: `ses_done_${index}`,
+        messageID: `msg_done_${index}`,
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:02:00.000Z",
+        updatedAt: "2026-04-30T10:02:00.000Z",
+      }),
+    );
+    const retainedErrors = Array.from({ length: 7 }, (_, index) =>
+      child({
+        id: `ses_error_${index}`,
+        title: `Retained error ${index}`,
+        source: "session",
+        targetSessionID: `ses_error_${index}`,
+        messageID: `msg_error_${index}`,
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:02:00.000Z",
+        updatedAt: "2026-04-30T10:02:00.000Z",
+      }),
+    );
+    const state = stateWith([
+      child({
+        id: "ses_running",
+        title: "Active child",
+        source: "session",
+        targetSessionID: "ses_running",
+        messageID: "msg_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+      ...retainedDone,
+      ...retainedErrors,
+    ]);
+
+    const defaultSnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+    });
+    const historySnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+      showCompletedHistory: true,
+    });
+
+    expect(defaultSnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_running",
+    ]);
+    expect(defaultSnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 6,
+      error: 7,
+    });
+    expect(defaultSnapshot.totalExecuted).toBe(14);
+    expect(historySnapshot.visibleChildren).toHaveLength(14);
+    expect(historySnapshot.visibleChildren.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["ses_done_0", "ses_error_0"]),
+    );
+    expect(historySnapshot.visibleCounts).toEqual(defaultSnapshot.visibleCounts);
+    expect(historySnapshot.totalExecuted).toBe(defaultSnapshot.totalExecuted);
+  });
+
+  it("keeps fallback rows and counters in the current session scope when current history is hidden", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "ses_current_done_old",
+        title: "Current retained done",
+        source: "session",
+        parentID: "ses_current",
+        targetSessionID: "ses_current_done_old",
+        messageID: "msg_current_done",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:02:00.000Z",
+        updatedAt: "2026-04-30T10:02:00.000Z",
+      }),
+      child({
+        id: "ses_current_error_old",
+        title: "Current retained error",
+        source: "session",
+        parentID: "ses_current",
+        targetSessionID: "ses_current_error_old",
+        messageID: "msg_current_error",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:03:00.000Z",
+        updatedAt: "2026-04-30T10:03:00.000Z",
+      }),
+      child({
+        id: "ses_other_running",
+        title: "Other session running",
+        source: "session",
+        parentID: "ses_other",
+        targetSessionID: "ses_other_running",
+        messageID: "msg_other_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+    ]);
+
+    const defaultSnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_current",
+      nowMs,
+      fallbackToOtherSessions: true,
+    });
+    const historySnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_current",
+      nowMs,
+      showCompletedHistory: true,
+      fallbackToOtherSessions: true,
+    });
+
+    expect(defaultSnapshot.showingOtherSessions).toBe(false);
+    expect(defaultSnapshot.visibleChildren.map((item) => item.id)).toEqual([]);
+    expect(defaultSnapshot.visibleCounts).toEqual({
+      running: 0,
+      done: 1,
+      error: 1,
+    });
+    expect(defaultSnapshot.totalExecuted).toBe(2);
+    expect(historySnapshot.visibleChildren).toHaveLength(2);
+    expect(historySnapshot.visibleChildren.map((item) => item.id)).toEqual(
+      expect.arrayContaining([
+        "ses_current_error_old",
+        "ses_current_done_old",
+      ]),
+    );
+    expect(historySnapshot.visibleCounts).toEqual(defaultSnapshot.visibleCounts);
+    expect(historySnapshot.totalExecuted).toBe(defaultSnapshot.totalExecuted);
+  });
+
+  it("falls back to other session rows with matching counters when current session has no retained executions", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "tool_current_wrapper",
+        title: "Current wrapper only",
+        source: "tool",
+        parentID: "ses_current",
+        targetSessionID: undefined,
+        messageID: "msg_current_wrapper",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:19:00.000Z",
+        updatedAt: "2026-04-30T10:19:00.000Z",
+      }),
+      child({
+        id: "ses_other_running",
+        title: "Other session running",
+        source: "session",
+        parentID: "ses_other",
+        targetSessionID: "ses_other_running",
+        messageID: "msg_other_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+      child({
+        id: "ses_other_done_old",
+        title: "Other retained done",
+        source: "session",
+        parentID: "ses_other",
+        targetSessionID: "ses_other_done_old",
+        messageID: "msg_other_done",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:02:00.000Z",
+        updatedAt: "2026-04-30T10:02:00.000Z",
+      }),
+    ]);
+
+    const defaultSnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_current",
+      nowMs,
+      fallbackToOtherSessions: true,
+    });
+
+    expect(defaultSnapshot.showingOtherSessions).toBe(true);
+    expect(defaultSnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_other_running",
+    ]);
+    expect(defaultSnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 1,
+      error: 0,
+    });
+    expect(defaultSnapshot.totalExecuted).toBe(2);
+  });
+
   it("resolves sidebar and home snapshots from classified real executions only", () => {
     const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
     const state = stateWith([
@@ -88,7 +292,7 @@ describe("TUI subagent snapshots", () => {
     expect(sidebar.visibleChildren.map((item) => item.id)).toEqual([
       "ses_real_running",
     ]);
-    expect(sidebar.visibleCounts).toEqual({ running: 1, done: 0, error: 0 });
+    expect(sidebar.visibleCounts).toEqual({ running: 1, done: 1, error: 0 });
     expect(sidebar.totalExecuted).toBe(2);
     expect(home.visibleChildren.map((item) => item.id)).toEqual([
       "ses_real_running",
@@ -131,6 +335,135 @@ describe("TUI subagent snapshots", () => {
     ]);
     expect(snapshot.visibleCounts).toEqual({ running: 0, done: 1, error: 0 });
     expect(snapshot.totalExecuted).toBe(1);
+  });
+
+  it("keeps stale errors historical while retaining status counters", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "ses_real_running",
+        title: "Active child",
+        source: "session",
+        targetSessionID: "ses_real_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+      child({
+        id: "ses_real_error_old",
+        title: "Old failed child",
+        source: "session",
+        targetSessionID: "ses_real_error_old",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:02:00.000Z",
+        updatedAt: "2026-04-30T10:02:00.000Z",
+      }),
+    ]);
+
+    const defaultSnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+    });
+    const historySnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+      showCompletedHistory: true,
+    });
+
+    expect(defaultSnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_real_running",
+    ]);
+    expect(defaultSnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 0,
+      error: 1,
+    });
+    expect(defaultSnapshot.totalExecuted).toBe(2);
+    expect(historySnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_real_running",
+      "ses_real_error_old",
+    ]);
+    expect(historySnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 0,
+      error: 1,
+    });
+    expect(historySnapshot.totalExecuted).toBe(2);
+  });
+
+  it("excludes recent unrelated errors from active rows while retaining counters", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "ses_real_running",
+        title: "Active child",
+        source: "session",
+        targetSessionID: "ses_real_running",
+        messageID: "msg_active",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+      child({
+        id: "ses_real_error_active",
+        title: "Active failed child",
+        source: "session",
+        targetSessionID: "ses_real_error_active",
+        messageID: "msg_active",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:19:00.000Z",
+        updatedAt: "2026-04-30T10:19:00.000Z",
+      }),
+      child({
+        id: "ses_real_error_recent_unrelated",
+        title: "Recent unrelated failed child",
+        source: "session",
+        targetSessionID: "ses_real_error_recent_unrelated",
+        messageID: "msg_unrelated",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T10:19:30.000Z",
+        updatedAt: "2026-04-30T10:19:30.000Z",
+      }),
+    ]);
+
+    const defaultSnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+    });
+    const historySnapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs,
+      showCompletedHistory: true,
+    });
+
+    expect(defaultSnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_real_running",
+      "ses_real_error_active",
+    ]);
+    expect(defaultSnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 0,
+      error: 2,
+    });
+    expect(defaultSnapshot.totalExecuted).toBe(3);
+    expect(historySnapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_real_running",
+      "ses_real_error_active",
+      "ses_real_error_recent_unrelated",
+    ]);
+    expect(historySnapshot.visibleCounts).toEqual({
+      running: 1,
+      done: 0,
+      error: 2,
+    });
+    expect(historySnapshot.totalExecuted).toBe(3);
   });
 
   it("backfills hydrated targets only when the real session match is unique", () => {

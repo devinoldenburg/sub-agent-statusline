@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEmptyState,
   countHistoricalSubagentExecutions,
+  countRetainedSubagentStatuses,
   getCounts,
   isVisibleSubagentCounterEligible,
   loadState,
@@ -315,6 +316,71 @@ describe("state", () => {
     ).toBe(0);
   });
 
+  it("counts retained real execution statuses with parent scoping", () => {
+    const children: ChildSessionState[] = [
+      child({
+        id: "ses_running",
+        targetSessionID: "ses_running",
+        messageID: "msg_running",
+        status: "running",
+      }),
+      child({
+        id: "tool:done-wrapper",
+        source: "tool",
+        toolName: "task",
+        targetSessionID: "ses_done",
+        messageID: "msg_done",
+      }),
+      child({
+        id: "ses_done",
+        targetSessionID: "ses_done",
+        messageID: "msg_done",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T09:45:00.000Z",
+        updatedAt: "2026-04-30T09:45:00.000Z",
+      }),
+      child({
+        id: "ses_error",
+        targetSessionID: "ses_error",
+        messageID: "msg_error",
+        status: "error",
+        color: "red",
+        endedAt: "2026-04-30T09:44:00.000Z",
+        updatedAt: "2026-04-30T09:44:00.000Z",
+      }),
+      child({
+        id: "tool:targetless",
+        source: "tool",
+        toolName: "delegate",
+        targetSessionID: undefined,
+        messageID: "msg_targetless",
+        status: "done",
+        color: "green",
+      }),
+      child({
+        id: "ses_other_error",
+        parentID: "ses_other_parent",
+        targetSessionID: "ses_other_error",
+        messageID: "msg_other_error",
+        status: "error",
+        color: "red",
+      }),
+    ];
+
+    expect(countRetainedSubagentStatuses({ children })).toEqual({
+      running: 1,
+      done: 1,
+      error: 2,
+    });
+    expect(
+      countRetainedSubagentStatuses({
+        children,
+        parentSessionID: "ses_parent",
+      }),
+    ).toEqual({ running: 1, done: 1, error: 1 });
+  });
+
   it("merges details, sanitizes tokens, and refreshes elapsed fields", () => {
     useFrozenTime("2026-04-30T10:02:00.000Z");
     const state = createEmptyState();
@@ -349,6 +415,13 @@ describe("state", () => {
       endedAt: "2026-04-26T08:00:00.000Z",
       updatedAt: "2026-04-26T08:00:00.000Z",
     });
+    state.children.oldError = child({
+      id: "oldError",
+      status: "error",
+      color: "red",
+      endedAt: "2026-04-26T08:00:00.000Z",
+      updatedAt: "2026-04-26T08:00:00.000Z",
+    });
     state.children.recentDone = child({
       id: "recentDone",
       status: "done",
@@ -356,12 +429,20 @@ describe("state", () => {
       endedAt: "2026-04-28T09:30:00.000Z",
       updatedAt: "2026-04-28T09:30:00.000Z",
     });
+    state.children.recentError = child({
+      id: "recentError",
+      status: "error",
+      color: "red",
+      endedAt: "2026-04-28T09:30:00.000Z",
+      updatedAt: "2026-04-28T09:30:00.000Z",
+    });
 
     expect(
       pruneTerminalChildren(state, new Date("2026-04-30T10:00:01.000Z")),
-    ).toBe(1);
+    ).toBe(2);
     expect(Object.keys(state.children).sort()).toEqual([
       "recentDone",
+      "recentError",
       "running",
     ]);
   });

@@ -1,3 +1,4 @@
+import { countRetainedSubagentStatuses } from "./state.js";
 import type { ChildSessionState, StatuslineState } from "./state.js";
 import {
   correlateSubagentWorkItems,
@@ -151,7 +152,7 @@ export function byPriority(a: ChildSessionState, b: ChildSessionState): number {
   return a.id.localeCompare(b.id);
 }
 
-const RECENT_DONE_VISIBLE_MS = 10 * 60 * 1000;
+const RECENT_TERMINAL_VISIBLE_MS = 10 * 60 * 1000;
 
 interface VisibleSubagentWorkItemsOptions {
   showCompletedHistory?: boolean;
@@ -168,14 +169,18 @@ export function collapseSubagentWorkItems(
   );
 }
 
+function isTerminalWorkItem(child: ChildSessionState): boolean {
+  return child.status === "done" || child.status === "error";
+}
+
 export function isVisibleWorkItem(
   child: ChildSessionState,
   nowMs = Date.now(),
 ): boolean {
-  if (child.status !== "done") return true;
+  if (!isTerminalWorkItem(child)) return true;
   const endedMs = Date.parse(child.endedAt ?? child.updatedAt);
   if (Number.isNaN(endedMs)) return false;
-  return nowMs - endedMs <= RECENT_DONE_VISIBLE_MS;
+  return nowMs - endedMs <= RECENT_TERMINAL_VISIBLE_MS;
 }
 
 export function visibleSubagentWorkItems(
@@ -197,7 +202,7 @@ export function visibleSubagentWorkItems(
   if (!hasRunning) return visible;
 
   return visible.filter((child) => {
-    if (child.status === "running" || child.status === "error") return true;
+    if (child.status === "running") return true;
     if (!child.messageID) return false;
     return activeMessageIDs.has(child.messageID);
   });
@@ -207,13 +212,11 @@ export function renderStatusLine(state: StatuslineState): string {
   const children = visibleSubagentWorkItems(Object.values(state.children)).sort(
     byPriority,
   );
-  const running = children.filter((c) => c.status === "running").length;
-  const done = children.filter((c) => c.status === "done").length;
-  const error = children.filter((c) => c.status === "error").length;
+  const counts = countRetainedSubagentStatuses({ children: state.children });
   const totalExecuted = formatNumber(state.totalExecuted ?? 0);
   const colorOn = colorsEnabled();
 
-  const aggregate = `↳ ${running} running · ${done} done · ${error} error · Σ ${totalExecuted} total`;
+  const aggregate = `↳ ${counts.running} running · ${counts.done} done · ${counts.error} error · Σ ${totalExecuted} total`;
   if (children.length === 0) return aggregate;
 
   const details = children
