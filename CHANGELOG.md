@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3 - 2026-06-20
+
+- Aligned the subagents sidebar section header with native OpenCode TUI sidebar sections: bold title, optional expand chevrons when more than two rows are visible, and no plugin version label in the sidebar.
+
 ## 0.8.0 - 2026-06-12
 
 - Made the fork independent with repository metadata pointing to `devinoldenburg/sub-agent-statusline` while preserving MIT attribution for the original project.

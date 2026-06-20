@@ -14,7 +14,6 @@ import type {
 import { useKeyboard } from "@opentui/solid";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -108,22 +107,6 @@ const SUBAGENTS_MAX_LIST_HEIGHT =
   SUBAGENTS_MAX_VISIBLE_ROWS * SUBAGENTS_RUNNING_ROW_HEIGHT +
   (SUBAGENTS_MAX_VISIBLE_ROWS - 1) * SUBAGENTS_ROW_GAP;
 const INACTIVE_SUBAGENT_OPACITY = 0.65;
-const SIDEBAR_VERSION_OPACITY = 0.7;
-
-const packageRequire = createRequire(import.meta.url);
-
-function readPluginVersion(): string | undefined {
-  try {
-    const metadata = packageRequire("../package.json") as { version?: unknown };
-    return typeof metadata.version === "string" && metadata.version.length > 0
-      ? metadata.version
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-const PLUGIN_VERSION = readPluginVersion();
 
 interface SidebarScrollRegistration {
   getScrollbox: () => ScrollBoxRenderable | undefined;
@@ -1465,22 +1448,21 @@ function SidebarSubagents(props: {
       focused={listFocused()}
       renderBefore={refreshListFocused}
     >
-      <box flexDirection="row">
-        <text
-          fg={props.theme.text}
-          selectable={false}
-          onMouseDown={props.onToggleExpanded}
-        >{`${props.expanded() ? symbols.expanded : symbols.collapsed} ${t("subagents")}`}</text>
-        <Show when={PLUGIN_VERSION}>
-          {(version: Accessor<string>) => (
-            <text
-              fg={props.theme.textMuted}
-              opacity={SIDEBAR_VERSION_OPACITY}
-              selectable={false}
-              onMouseDown={props.onToggleExpanded}
-            >{` ${version()}`}</text>
-          )}
+      <box
+        flexDirection="row"
+        gap={1}
+        onMouseDown={() =>
+          visibleChildIDs().length > 2 && props.onToggleExpanded()
+        }
+      >
+        <Show when={visibleChildIDs().length > 2}>
+          <text fg={props.theme.text} selectable={false}>
+            {props.expanded() ? "▼" : "▶"}
+          </text>
         </Show>
+        <text fg={props.theme.text} selectable={false}>
+          <b>{t("subagents")}</b>
+        </text>
       </box>
       <AggregateBar />
 
