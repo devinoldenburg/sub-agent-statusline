@@ -43,12 +43,14 @@ import {
   nextBackoffState,
   parseStaleRunningThresholdMs as parseConfiguredStaleRunningThresholdMs,
   resolvePersistedStaleSubtaskFromParentMessages,
+  resolveSessionStatusWithMessageSummary,
   shouldApplyStaleRunningFallback,
   shouldSkipCandidateForBackoff,
   summarizeSessionMessages,
   type PersistedStaleSubtaskCandidate,
   type RunningReconcileCacheEntry,
   type RunningReconcileEvidence,
+  type SessionMessageSummary,
 } from "./reconcile.js";
 import {
   focusPromptWithDeferredRetry,
@@ -1555,7 +1557,7 @@ function HomeBottomStatus(props: {
   );
 }
 
-async function hydratePreviousSubagents(
+export async function hydratePreviousSubagents(
   api: TuiPluginApi,
   currentSessionID: string,
   statePath: string,
@@ -1610,8 +1612,14 @@ async function hydratePreviousSubagents(
     const children = Array.isArray(childrenResp?.data) ? childrenResp.data : [];
     const messages = Array.isArray(messagesResp?.data) ? messagesResp.data : [];
     const allStatuses = asRecord(statusResp?.data) ?? {};
+    const parentLinkedChildIDs = collectParentLinkedChildSessionIDs(
+      messages,
+      currentSessionID,
+    );
     let childHydrationFailed = false;
-    const childMessageResults = await Promise.all(
+    const childMessageResults: Array<
+      SessionMessageSummary & { childID?: string; fetchFailed: boolean }
+    > = await Promise.all(
       children.map(async (child) => {
         const session = asRecord(child);
         const childID =
@@ -1659,6 +1667,20 @@ async function hydratePreviousSubagents(
       for (const rawSession of children) {
         const session = asRecord(rawSession);
         if (!session || typeof session.id !== "string") continue;
+        const status = allStatuses[session.id];
+        const sessionStatus = deriveSessionChildStatus(status);
+        const childSummary = childMessageSummaryByID.get(session.id);
+        if (
+          !shouldHydrateSessionChild({
+            childID: session.id,
+            sessionStatus,
+            childSummary,
+            parentLinkedChildIDs,
+          })
+        ) {
+          continue;
+        }
+
         const fakeEvent = {
           type: "session.created",
           properties: {
@@ -1668,9 +1690,6 @@ async function hydratePreviousSubagents(
         };
         if (applySubagentEvent(next, fakeEvent)) changed = true;
 
-        const status = allStatuses[session.id];
-        const sessionStatus = deriveSessionChildStatus(status);
-        const childSummary = childMessageSummaryByID.get(session.id);
         const explicitCompletionEvidence =
           !!childSummary &&
           !childSummary.fetchFailed &&
@@ -1683,8 +1702,23 @@ async function hydratePreviousSubagents(
           sessionTimestamp(session, "completed") ??
           sessionTimestamp(session, "updated");
 
-        if (sessionStatus === "done" || sessionStatus === "error") {
-          if (markChildStatus(next, session.id, sessionStatus, statusEndedAt))
+        const resolvedStatus = resolveSessionStatusWithMessageSummary({
+          status: sessionStatus,
+          summary: childSummary,
+        });
+
+        if (
+          resolvedStatus.status === "done" ||
+          resolvedStatus.status === "error"
+        ) {
+          if (
+            markChildStatus(
+              next,
+              session.id,
+              resolvedStatus.status,
+              resolvedStatus.endedAt ?? statusEndedAt,
+            )
+          )
             changed = true;
           continue;
         }
@@ -1770,6 +1804,80 @@ async function hydratePreviousSubagents(
       error: String(err),
     });
     return false;
+  }
+}
+
+function shouldHydrateSessionChild(input: {
+  childID: string;
+  sessionStatus?: ChildSessionState["status"];
+  childSummary?: SessionMessageSummary;
+  parentLinkedChildIDs: ReadonlySet<string>;
+}): boolean {
+  if (input.sessionStatus) return true;
+  if (input.parentLinkedChildIDs.has(input.childID)) return true;
+
+  const summary = input.childSummary;
+  if (!summary || summary.fetchFailed) return false;
+
+  return (
+    summary.hasError === true ||
+    typeof summary.completedAt === "string" ||
+    typeof summary.evidenceAt === "string" ||
+    typeof summary.latestAssistantActivityAt === "string" ||
+    typeof summary.latestMessageActivityAt === "string"
+  );
+}
+
+function collectParentLinkedChildSessionIDs(
+  messages: unknown[],
+  parentSessionID: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const rawMessage of messages) {
+    const message = asRecord(rawMessage);
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    for (const rawPart of parts) {
+      collectLinkedSessionIDs(rawPart, ids);
+    }
+  }
+  ids.delete(parentSessionID);
+  return ids;
+}
+
+function collectLinkedSessionIDs(
+  value: unknown,
+  target: Set<string>,
+  depth = 0,
+): void {
+  if (depth > 4 || !value) return;
+
+  if (typeof value === "string") {
+    for (const match of value.matchAll(/\bses_[a-zA-Z0-9_-]+\b/g)) {
+      const id = match[0];
+      if (id) target.add(id);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectLinkedSessionIDs(item, target, depth + 1);
+    return;
+  }
+
+  const record = asRecord(value);
+  if (!record) return;
+
+  for (const [key, nested] of Object.entries(record)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized.includes("session") ||
+      normalized === "output" ||
+      normalized === "metadata"
+    ) {
+      collectLinkedSessionIDs(nested, target, depth + 1);
+    } else if (Array.isArray(nested) || asRecord(nested)) {
+      collectLinkedSessionIDs(nested, target, depth + 1);
+    }
   }
 }
 
@@ -1918,7 +2026,7 @@ function selectRunningReconcileCandidates(input: {
   return capCandidates(selected, input.maxCandidates);
 }
 
-async function probeRunningEvidence(input: {
+export async function probeRunningEvidence(input: {
   api: TuiPluginApi;
   targetSessionID: string;
   directory: string;
@@ -1932,12 +2040,15 @@ async function probeRunningEvidence(input: {
   );
   if (directStatus === undefined) probeFailed = true;
   const statusFromState = deriveSessionChildStatus(directStatus);
-  if (statusFromState === "done" || statusFromState === "error") {
+  if (statusFromState === "error") {
     return { status: statusFromState, endedAt: new Date().toISOString() };
   }
   if (statusFromState === "running") {
     return { status: "running", sawRunningEvidence: true };
   }
+
+  const doneFromState = statusFromState === "done";
+  let doneFromClient = false;
 
   const statusResp = await safeReadAsync(() =>
     input.api.client.session.status({ directory: input.directory }),
@@ -1947,14 +2058,20 @@ async function probeRunningEvidence(input: {
   const statusFromClient = deriveSessionChildStatus(
     statuses?.[input.targetSessionID],
   );
-  if (statusFromClient === "done" || statusFromClient === "error") {
+  if (statusFromClient === "error") {
     return { status: statusFromClient, endedAt: new Date().toISOString() };
   }
   if (statusFromClient === "running") {
     return { status: "running", sawRunningEvidence: true };
   }
+  doneFromClient = statusFromClient === "done";
 
-  if (input.candidateAgeMs < RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS) {
+  const hasDoneStatus = doneFromState || doneFromClient;
+
+  if (
+    !hasDoneStatus &&
+    input.candidateAgeMs < RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS
+  ) {
     return { probeFailed, canApplyStaleFallback: false };
   }
 
@@ -1965,6 +2082,15 @@ async function probeRunningEvidence(input: {
     }),
   );
   if (messagesResp === undefined || !Array.isArray(messagesResp?.data)) {
+    if (hasDoneStatus) {
+      return {
+        status: "done",
+        endedAt: new Date().toISOString(),
+        checkedMessages: false,
+        probeFailed: true,
+        canApplyStaleFallback: false,
+      };
+    }
     return {
       checkedMessages: false,
       probeFailed: true,
@@ -1973,20 +2099,24 @@ async function probeRunningEvidence(input: {
   }
   const messages = Array.isArray(messagesResp?.data) ? messagesResp.data : [];
   const summary = summarizeSessionMessages(messages);
+  const resolvedStatus = resolveSessionStatusWithMessageSummary({
+    status: hasDoneStatus ? "done" : undefined,
+    summary,
+  });
 
-  if (summary.hasError) {
+  if (resolvedStatus.status === "error") {
     return {
       status: "error",
-      endedAt: summary.evidenceAt,
+      endedAt: resolvedStatus.endedAt,
       checkedMessages: true,
       canApplyStaleFallback: false,
     };
   }
 
-  if (typeof summary.completedAt === "string") {
+  if (resolvedStatus.status === "done") {
     return {
       status: "done",
-      endedAt: summary.completedAt,
+      endedAt: resolvedStatus.endedAt ?? new Date().toISOString(),
       checkedMessages: true,
       canApplyStaleFallback: false,
     };

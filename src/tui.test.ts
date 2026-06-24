@@ -1,10 +1,13 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 import { describe, expect, it, vi } from "vitest";
 import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
   backfillHydratedTargetSessionIDs,
+  hydratePreviousSubagents,
+  probeRunningEvidence,
   resolveTuiSubagentSnapshot,
 } from "./tui.js";
 import {
@@ -36,6 +39,44 @@ function stateWith(children: ChildSessionState[]): StatuslineState {
     totalExecuted: 99,
     updatedAt: "2026-04-30T10:20:00.000Z",
   };
+}
+
+async function hydrateState(input: {
+  children: unknown[];
+  parentMessages?: unknown[];
+  childMessages?: Record<string, unknown[]>;
+  statuses?: Record<string, unknown>;
+}): Promise<StatuslineState> {
+  let state = stateWith([]);
+  const dir = await mkdtemp(join(tmpdir(), "subagent-statusline-hydrate-"));
+  const childMessages = input.childMessages ?? {};
+  const api = {
+    state: { path: { directory: dir } },
+    client: {
+      session: {
+        children: vi.fn(async () => ({ data: input.children })),
+        messages: vi.fn(async ({ sessionID }: { sessionID: string }) => ({
+          data:
+            sessionID === "ses_parent"
+              ? (input.parentMessages ?? [])
+              : (childMessages[sessionID] ?? []),
+        })),
+        status: vi.fn(async () => ({ data: input.statuses ?? {} })),
+      },
+    },
+  } as unknown as TuiPluginApi;
+
+  await hydratePreviousSubagents(
+    api,
+    "ses_parent",
+    join(dir, "state.json"),
+    join(dir, "status.txt"),
+    (update) => {
+      state = update(state);
+    },
+  );
+
+  return state;
 }
 
 describe("TUI subagent snapshots", () => {
@@ -506,6 +547,147 @@ describe("TUI subagent snapshots", () => {
 
     expect(backfillHydratedTargetSessionIDs(unique, "ses_parent")).toBe(true);
     expect(unique.children["tool:matched"]?.targetSessionID).toBe("ses_second");
+  });
+});
+
+describe("hydratePreviousSubagents", () => {
+  const hydratedChild = {
+    id: "ses_child",
+    parentID: "ses_parent",
+    title: "Hydrated child",
+    agent: "sdd-propose",
+    time: { created: "2026-04-30T10:00:00.000Z" },
+  };
+
+  it("skips child-session stubs with no status, messages, or parent evidence", async () => {
+    const state = await hydrateState({
+      children: [hydratedChild],
+      childMessages: { ses_child: [] },
+      statuses: {},
+    });
+
+    expect(state.children).not.toHaveProperty("ses_child");
+    expect(
+      resolveTuiSubagentSnapshot({ state, sessionID: "ses_parent" })
+        .visibleCounts,
+    ).toEqual({ running: 0, done: 0, error: 0 });
+  });
+
+  it("hydrates a child with explicit running status", async () => {
+    const state = await hydrateState({
+      children: [hydratedChild],
+      childMessages: { ses_child: [] },
+      statuses: { ses_child: { status: "running" } },
+    });
+
+    expect(state.children["ses_child"]?.status).toBe("running");
+    expect(
+      resolveTuiSubagentSnapshot({ state, sessionID: "ses_parent" })
+        .visibleCounts,
+    ).toEqual({ running: 1, done: 0, error: 0 });
+  });
+
+  it("hydrates terminal done and error evidence", async () => {
+    const errorAt = new Date().toISOString();
+    const state = await hydrateState({
+      children: [
+        { ...hydratedChild, id: "ses_done", title: "Done child" },
+        { ...hydratedChild, id: "ses_error", title: "Error child" },
+      ],
+      childMessages: {
+        ses_done: [],
+        ses_error: [
+          {
+            info: {
+              role: "assistant",
+              error: { detail: "Unsupported content type" },
+              time: { updated: errorAt },
+            },
+            parts: [],
+          },
+        ],
+      },
+      statuses: { ses_done: { status: "idle" } },
+    });
+
+    expect(state.children["ses_done"]?.status).toBe("done");
+    expect(state.children["ses_error"]?.status).toBe("error");
+    expect(
+      resolveTuiSubagentSnapshot({ state, sessionID: "ses_parent" })
+        .visibleCounts,
+    ).toEqual({ running: 0, done: 1, error: 1 });
+  });
+
+  it("hydrates a child linked by parent tool evidence", async () => {
+    const state = await hydrateState({
+      children: [hydratedChild],
+      parentMessages: [
+        {
+          id: "msg_parent",
+          info: { id: "msg_parent", role: "assistant" },
+          parts: [
+            {
+              id: "part_task",
+              type: "tool",
+              tool: "task",
+              sessionID: "ses_parent",
+              state: {
+                status: "running",
+                metadata: { sessionId: "ses_child" },
+                input: {
+                  description: "Hydrated child",
+                  subagent_type: "sdd-propose",
+                },
+              },
+            },
+          ],
+        },
+      ],
+      childMessages: { ses_child: [] },
+      statuses: {},
+    });
+
+    expect(state.children["ses_child"]?.status).toBe("running");
+    expect(state.children["tool:part_task"]?.targetSessionID).toBe(
+      "ses_child",
+    );
+  });
+});
+
+describe("probeRunningEvidence", () => {
+  it("lets client status nested error evidence override direct done status", async () => {
+    const api = {
+      state: {
+        session: {
+          status: vi.fn(() => "done"),
+        },
+      },
+      client: {
+        session: {
+          status: vi.fn(async () => ({
+            data: {
+              ses_child: {
+                status: "idle",
+                info: { error: { detail: "Unsupported content type" } },
+              },
+            },
+          })),
+          messages: vi.fn(async () => ({ data: [] })),
+        },
+      },
+    } as unknown as TuiPluginApi;
+
+    const evidence = await probeRunningEvidence({
+      api,
+      targetSessionID: "ses_child",
+      directory: "/repo",
+      candidateAgeMs: 60_000,
+      nowMs: Date.now(),
+    });
+
+    expect(evidence.status).toBe("error");
+    expect(api.client.session.status).toHaveBeenCalledOnce();
+    expect(api.client.session.messages).not.toHaveBeenCalled();
   });
 });
 

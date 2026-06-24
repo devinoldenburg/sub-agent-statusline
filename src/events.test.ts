@@ -224,6 +224,77 @@ describe("events", () => {
     });
   });
 
+  it("maps session.status idle with structured error evidence to error", () => {
+    const state = createEmptyState();
+    applySubagentEvent(state, {
+      type: "session.created",
+      properties: {
+        info: {
+          id: "ses_child_status_idle_error",
+          parentID: "ses_parent",
+          title: "Child status idle error",
+          time: { created: "2026-05-10T10:00:00.000Z" },
+        },
+      },
+    });
+
+    const changed = applySubagentEvent(state, {
+      type: "session.status",
+      properties: {
+        sessionID: "ses_child_status_idle_error",
+        status: "idle",
+        info: {
+          error: {
+            message: "Bad Request",
+            detail: "Unsupported content type",
+          },
+          time: { updated: "2026-05-10T10:15:00.000Z" },
+        },
+      },
+    });
+
+    expect(changed).toBe(true);
+    expect(state.children.ses_child_status_idle_error).toMatchObject({
+      status: "error",
+      endedAt: "2026-05-10T10:15:00.000Z",
+    });
+  });
+
+  it("maps session.idle with structured error evidence to error", () => {
+    const state = createEmptyState();
+    applySubagentEvent(state, {
+      type: "session.created",
+      properties: {
+        info: {
+          id: "ses_child_idle_error",
+          parentID: "ses_parent",
+          title: "Child idle error",
+          time: { created: "2026-05-10T10:00:00.000Z" },
+        },
+      },
+    });
+
+    const changed = applySubagentEvent(state, {
+      type: "session.idle",
+      properties: {
+        sessionID: "ses_child_idle_error",
+        info: {
+          error: {
+            message: "Bad Request",
+            detail: "Unsupported content type",
+          },
+          time: { updated: "2026-05-10T10:15:00.000Z" },
+        },
+      },
+    });
+
+    expect(changed).toBe(true);
+    expect(state.children.ses_child_idle_error).toMatchObject({
+      status: "error",
+      endedAt: "2026-05-10T10:15:00.000Z",
+    });
+  });
+
   it.each([
     "busy",
     "retry",

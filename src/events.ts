@@ -1,5 +1,8 @@
 import type { ChildTokenState, StatuslineState } from "./state.js";
-import { deriveOpenCodeSessionStatus } from "./reconcile.js";
+import {
+  deriveOpenCodeSessionStatus,
+  hasStructuredErrorEvidence,
+} from "./reconcile.js";
 import {
   markChildStatus,
   upsertChildDetails,
@@ -813,7 +816,12 @@ export function applySubagentEvent(
       "updated",
     ]);
     const details = extractChildDetails(e);
-    let changed = markChildStatus(state, childID, "done", endedAt);
+    const status =
+      deriveOpenCodeSessionStatus(e.properties ?? e) === "error" ||
+      hasStructuredErrorEvidence(e.properties ?? e)
+        ? "error"
+        : "done";
+    let changed = markChildStatus(state, childID, status, endedAt);
     changed = upsertChildDetails(state, childID, details) || changed;
     return changed;
   }
@@ -836,14 +844,16 @@ export function applySubagentEvent(
   if (type === "session.status") {
     const childID = extractSessionID(e);
     if (!childID) return false;
-    const status = deriveOpenCodeSessionStatus(
-      e.properties?.status ??
-        e.properties?.state ??
-        e.properties?.info?.status ??
-        e.status ??
-        e.state ??
-        e.properties,
-    );
+    const status = hasStructuredErrorEvidence(e.properties ?? e)
+      ? "error"
+      : deriveOpenCodeSessionStatus(
+          e.properties?.status ??
+            e.properties?.state ??
+            e.properties?.info?.status ??
+            e.status ??
+            e.state ??
+            e.properties,
+        );
     if (!status) return false;
 
     const endedAt =
