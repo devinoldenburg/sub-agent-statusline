@@ -7,8 +7,11 @@ import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
   backfillHydratedTargetSessionIDs,
   hydratePreviousSubagents,
+  preservedSidebarAnchorScrollTop,
+  preservedSidebarScrollTop,
   probeRunningEvidence,
   resolveTuiSubagentSnapshot,
+  subagentRowHeight,
 } from "./tui.js";
 import {
   focusPromptWithDeferredRetry,
@@ -80,6 +83,118 @@ async function hydrateState(input: {
 }
 
 describe("TUI subagent snapshots", () => {
+  it("matches running row height to rendered secondary-line presence", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+
+    expect(
+      subagentRowHeight({ child: child({ title: "Short task" }), nowMs }),
+    ).toBe(2);
+    expect(
+      subagentRowHeight({
+        child: child({ title: "Short task", agentName: "reviewer" }),
+        nowMs,
+      }),
+    ).toBe(3);
+    expect(
+      subagentRowHeight({
+        child: child({ title: "Short task", status: "done" }),
+        nowMs,
+      }),
+    ).toBe(2);
+  });
+
+  it("preserves sidebar scroll with the visible row anchor first", () => {
+    expect(
+      preservedSidebarAnchorScrollTop({
+        expanded: true,
+        anchor: {
+          childIDs: ["ses_5", "ses_6", "ses_7"],
+          intraRowOffset: 1,
+        },
+        rows: [
+          { id: "ses_1", height: 3 },
+          { id: "ses_2", height: 3 },
+          { id: "ses_5", height: 3 },
+          { id: "ses_6", height: 3 },
+          { id: "ses_7", height: 3 },
+        ],
+        scrollTop: 0,
+        scrollHeight: 15,
+        viewportHeight: 5,
+      }),
+    ).toBe(7);
+
+    expect(
+      preservedSidebarScrollTop({
+        expanded: true,
+        offsetTop: 99,
+        anchor: {
+          childIDs: ["ses_removed", "ses_6", "ses_7"],
+          intraRowOffset: 1,
+        },
+        rows: [
+          { id: "ses_1", height: 3 },
+          { id: "ses_2", height: 3 },
+          { id: "ses_6", height: 3 },
+          { id: "ses_7", height: 3 },
+        ],
+        scrollTop: 0,
+        scrollHeight: 12,
+        viewportHeight: 5,
+      }),
+    ).toBe(6);
+  });
+
+  it("does not fall back to stale numeric offset when anchor already matches top", () => {
+    expect(
+      preservedSidebarScrollTop({
+        expanded: true,
+        offsetTop: 6,
+        anchor: {
+          childIDs: ["ses_1", "ses_2"],
+          intraRowOffset: 0,
+        },
+        rows: [
+          { id: "ses_1", height: 3 },
+          { id: "ses_2", height: 3 },
+        ],
+        scrollTop: 0,
+        scrollHeight: 8,
+        viewportHeight: 5,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("falls back to bounded numeric sidebar scroll preservation", () => {
+    expect(
+      preservedSidebarScrollTop({
+        expanded: true,
+        offsetTop: 99,
+        scrollTop: 0,
+        scrollHeight: 12,
+        viewportHeight: 5,
+      }),
+    ).toBe(7);
+    expect(
+      preservedSidebarScrollTop({
+        expanded: false,
+        offsetTop: 6,
+        scrollTop: 0,
+        scrollHeight: 12,
+        viewportHeight: 5,
+      }),
+    ).toBeUndefined();
+    expect(
+      preservedSidebarScrollTop({
+        expanded: true,
+        offsetTop: 6,
+        scrollTop: 6,
+        scrollHeight: 12,
+        viewportHeight: 5,
+      }),
+    ).toBeUndefined();
+  });
+
   it("does not show other-session rows by default when current session has no executions", () => {
     const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
     const state = stateWith([

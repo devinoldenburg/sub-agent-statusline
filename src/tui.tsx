@@ -105,6 +105,7 @@ const SUBAGENTS_MAX_VISIBLE_ROWS = 5;
 const SUBAGENTS_RUNNING_ROW_HEIGHT = 3;
 const SUBAGENTS_TERMINAL_ROW_HEIGHT = 2;
 const SUBAGENTS_ROW_GAP = 0;
+const SUBAGENTS_ROW_MARKER_WIDTH = 4;
 const SUBAGENTS_MAX_LIST_HEIGHT =
   SUBAGENTS_MAX_VISIBLE_ROWS * SUBAGENTS_RUNNING_ROW_HEIGHT +
   (SUBAGENTS_MAX_VISIBLE_ROWS - 1) * SUBAGENTS_ROW_GAP;
@@ -128,7 +129,22 @@ const PLUGIN_VERSION = readPluginVersion();
 
 interface SidebarScrollRegistration {
   getScrollbox: () => ScrollBoxRenderable | undefined;
+  getAnchor: () => SidebarScrollAnchor | undefined;
+  getRows: () => SidebarScrollRowLayout[];
+  getLeadingHeight: () => number;
   offsetTop: number;
+  anchor?: SidebarScrollAnchor;
+  restoreFramesRemaining: number;
+}
+
+export interface SidebarScrollAnchor {
+  childIDs: string[];
+  intraRowOffset: number;
+}
+
+export interface SidebarScrollRowLayout {
+  id: string;
+  height: number;
 }
 
 interface SidebarListFocusRegistration {
@@ -145,6 +161,7 @@ const sidebarScrollRegistrations = new Set<SidebarScrollRegistration>();
 const sidebarListFocusRegistrations = new Set<SidebarListFocusRegistration>();
 const sidebarCompletedHistoryRegistrations =
   new Set<SidebarCompletedHistoryRegistration>();
+const SIDEBAR_SCROLL_RESTORE_FRAME_BUDGET = 2;
 
 function focusVisibleSidebarSubagentList(preferredChildID?: string): boolean {
   for (const registration of [...sidebarListFocusRegistrations].reverse()) {
@@ -191,7 +208,89 @@ function snapshotSidebarScrollOffsets(): void {
     const scrollbox = registration.getScrollbox();
     if (!scrollbox) continue;
     registration.offsetTop = clampedScrollTop(scrollbox, scrollbox.scrollTop);
+    registration.anchor = registration.getAnchor();
+    registration.restoreFramesRemaining = SIDEBAR_SCROLL_RESTORE_FRAME_BUDGET;
   }
+}
+
+function resolveSidebarAnchorScrollTop(input: {
+  expanded: boolean;
+  anchor?: SidebarScrollAnchor;
+  rows: SidebarScrollRowLayout[];
+  leadingHeight: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): { matched: boolean; offsetTop?: number; scrollTop?: number } {
+  if (!input.expanded || !input.anchor || input.anchor.childIDs.length === 0) {
+    return { matched: false };
+  }
+
+  let top = input.leadingHeight;
+  const rowTops = new Map<string, number>();
+  for (const row of input.rows) {
+    rowTops.set(row.id, top);
+    top += row.height + SUBAGENTS_ROW_GAP;
+  }
+
+  for (const [index, childID] of input.anchor.childIDs.entries()) {
+    const rowTop = rowTops.get(childID);
+    if (rowTop === undefined) continue;
+
+    const desiredTop = rowTop + (index === 0 ? input.anchor.intraRowOffset : 0);
+    const maxTop = Math.max(0, input.scrollHeight - input.viewportHeight);
+    const nextTop = Math.max(0, Math.min(desiredTop, maxTop));
+    return {
+      matched: true,
+      offsetTop: nextTop,
+      scrollTop: input.scrollTop !== nextTop ? nextTop : undefined,
+    };
+  }
+
+  return { matched: false };
+}
+
+export function preservedSidebarAnchorScrollTop(input: {
+  expanded: boolean;
+  anchor?: SidebarScrollAnchor;
+  rows: SidebarScrollRowLayout[];
+  leadingHeight?: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): number | undefined {
+  return resolveSidebarAnchorScrollTop({
+    ...input,
+    leadingHeight: input.leadingHeight ?? 0,
+  }).scrollTop;
+}
+
+export function preservedSidebarScrollTop(input: {
+  expanded: boolean;
+  offsetTop: number;
+  anchor?: SidebarScrollAnchor;
+  rows?: SidebarScrollRowLayout[];
+  leadingHeight?: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): number | undefined {
+  if (!input.expanded) return undefined;
+
+  const anchorTop = resolveSidebarAnchorScrollTop({
+    expanded: input.expanded,
+    anchor: input.anchor,
+    rows: input.rows ?? [],
+    leadingHeight: input.leadingHeight ?? 0,
+    scrollTop: input.scrollTop,
+    scrollHeight: input.scrollHeight,
+    viewportHeight: input.viewportHeight,
+  });
+  if (anchorTop.matched) return anchorTop.scrollTop;
+
+  const maxTop = Math.max(0, input.scrollHeight - input.viewportHeight);
+  const top = Math.max(0, Math.min(input.offsetTop, maxTop));
+  return top > 0 && input.scrollTop !== top ? top : undefined;
 }
 
 type SidebarContentContext = TuiSlotContext & { session_id?: string };
@@ -938,10 +1037,18 @@ function formatTerminalChildRowLine(input: {
   };
 }
 
-function subagentRowHeight(child: ChildSessionState): number {
-  return child.status === "running"
+export function subagentRowHeight(input: {
+  child: ChildSessionState;
+  nowMs: number;
+  sidebarWidth?: number;
+  reservedWidth?: number;
+}): number {
+  if (input.child.status !== "running") return SUBAGENTS_TERMINAL_ROW_HEIGHT;
+
+  const line = formatChildRowLine(input);
+  return line.secondaryLine
     ? SUBAGENTS_RUNNING_ROW_HEIGHT
-    : SUBAGENTS_TERMINAL_ROW_HEIGHT;
+    : SUBAGENTS_RUNNING_ROW_HEIGHT - 1;
 }
 
 export interface TuiSubagentSnapshot {
@@ -1068,9 +1175,18 @@ function SidebarSubagents(props: {
   );
 
   const listHeight = createMemo(() => {
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
     const contentHeight =
       visibleChildren().reduce(
-        (height, child) => height + subagentRowHeight(child),
+        (height, child) =>
+          height +
+          subagentRowHeight({
+            child,
+            nowMs,
+            sidebarWidth,
+            reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+          }),
         showingOtherSessions() ? 1 : 0,
       ) +
       Math.max(0, visibleChildren().length - 1) * SUBAGENTS_ROW_GAP;
@@ -1080,10 +1196,13 @@ function SidebarSubagents(props: {
 
   let listContainer: BoxRenderable | undefined;
   let scrollbox: ScrollBoxRenderable | undefined;
-  let restoreScrollTimeout: ReturnType<typeof setTimeout> | undefined;
   const scrollRegistration: SidebarScrollRegistration = {
     getScrollbox: () => scrollbox,
+    getAnchor: () => currentSidebarScrollAnchor(),
+    getRows: () => rowLayouts(),
+    getLeadingHeight: () => (showingOtherSessions() ? 1 : 0),
     offsetTop: 0,
+    restoreFramesRemaining: 0,
   };
   sidebarScrollRegistrations.add(scrollRegistration);
   const focusRegistration: SidebarListFocusRegistration = {
@@ -1121,7 +1240,6 @@ function SidebarSubagents(props: {
     sidebarScrollRegistrations.delete(scrollRegistration);
     sidebarListFocusRegistrations.delete(focusRegistration);
     sidebarCompletedHistoryRegistrations.delete(completedHistoryRegistration);
-    if (restoreScrollTimeout) clearTimeout(restoreScrollTimeout);
   });
 
   createEffect(() => {
@@ -1147,35 +1265,93 @@ function SidebarSubagents(props: {
 
   const rowTopForIndex = (index: number): number => {
     let top = showingOtherSessions() ? 1 : 0;
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
     for (let i = 0; i < index; i += 1) {
       const child = visibleChildren()[i];
-      if (child) top += subagentRowHeight(child) + SUBAGENTS_ROW_GAP;
+      if (child) {
+        top +=
+          subagentRowHeight({
+            child,
+            nowMs,
+            sidebarWidth,
+            reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+          }) + SUBAGENTS_ROW_GAP;
+      }
     }
     return top;
   };
 
-  const scrollSelectedChildIntoView = (): void => {
+  const rowLayouts = (): SidebarScrollRowLayout[] => {
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
+    return visibleChildren().map((child) => ({
+      id: child.id,
+      height: subagentRowHeight({
+        child,
+        nowMs,
+        sidebarWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      }),
+    }));
+  };
+
+  const currentSidebarScrollAnchor = (): SidebarScrollAnchor | undefined => {
+    if (!scrollbox) return undefined;
+    const rows = rowLayouts();
+    if (rows.length === 0) return undefined;
+
+    const viewportTop = clampedScrollTop(scrollbox, scrollbox.scrollTop);
+    let top = showingOtherSessions() ? 1 : 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      if (!row) continue;
+      const rowBottom = top + row.height;
+      if (rowBottom > viewportTop) {
+        return {
+          childIDs: rows.slice(index).map((candidate) => candidate.id),
+          intraRowOffset: Math.max(0, viewportTop - top),
+        };
+      }
+      top = rowBottom + SUBAGENTS_ROW_GAP;
+    }
+
+    const lastRow = rows[rows.length - 1];
+    return lastRow ? { childIDs: [lastRow.id], intraRowOffset: 0 } : undefined;
+  };
+
+  const scrollChildIntoView = (childID: string | undefined): void => {
     if (!scrollbox) return;
-    const selectedIndex = visibleChildIDs().findIndex(
-      (id) => id === selectedChildID(),
-    );
+    const selectedIndex = visibleChildIDs().findIndex((id) => id === childID);
     if (selectedIndex < 0) return;
     const selectedChild = visibleChildren()[selectedIndex];
     if (!selectedChild) return;
 
     const rowTop = rowTopForIndex(selectedIndex);
-    const rowBottom = rowTop + subagentRowHeight(selectedChild);
+    const rowBottom =
+      rowTop +
+      subagentRowHeight({
+        child: selectedChild,
+        nowMs: props.nowMs(),
+        sidebarWidth: props.sidebarWidth?.(),
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      });
     const viewportTop = scrollbox.scrollTop;
     const viewportBottom = viewportTop + listHeight();
 
     if (rowTop < viewportTop) {
-      scrollbox.scrollTop = clampedScrollTop(scrollbox, rowTop);
+      const nextTop = clampedScrollTop(scrollbox, rowTop);
+      scrollRegistration.offsetTop = nextTop;
+      scrollbox.scrollTop = nextTop;
     } else if (rowBottom > viewportBottom) {
-      scrollbox.scrollTop = clampedScrollTop(
-        scrollbox,
-        rowBottom - listHeight(),
-      );
+      const nextTop = clampedScrollTop(scrollbox, rowBottom - listHeight());
+      scrollRegistration.offsetTop = nextTop;
+      scrollbox.scrollTop = nextTop;
     }
+  };
+
+  const scrollSelectedChildIntoView = (): void => {
+    scrollChildIntoView(selectedChildID());
   };
 
   const moveSelection = (delta: number): void => {
@@ -1191,6 +1367,7 @@ function SidebarSubagents(props: {
       ),
     );
     setSelectedChildID(ids[nextIndex]);
+    scrollChildIntoView(ids[nextIndex]);
   };
 
   const rowActivations = new Map<string, () => void>();
@@ -1227,6 +1404,7 @@ function SidebarSubagents(props: {
   createEffect(() => {
     selectedChildID();
     listHeight();
+    if (!listFocused()) return;
     scrollSelectedChildIntoView();
   });
 
@@ -1260,6 +1438,26 @@ function SidebarSubagents(props: {
 
   useKeyboard(handleListKeyDown);
 
+  const restorePreservedScroll = (): void => {
+    if (!scrollbox) return;
+    if (scrollRegistration.restoreFramesRemaining <= 0) return;
+    scrollRegistration.restoreFramesRemaining -= 1;
+
+    const top = preservedSidebarScrollTop({
+      expanded: props.expanded(),
+      offsetTop: scrollRegistration.offsetTop,
+      anchor: scrollRegistration.anchor,
+      rows: scrollRegistration.getRows(),
+      leadingHeight: scrollRegistration.getLeadingHeight(),
+      scrollTop: scrollbox.scrollTop,
+      scrollHeight: scrollbox.scrollHeight,
+      viewportHeight: scrollbox.viewport.height,
+    });
+    if (top === undefined) return;
+    scrollRegistration.offsetTop = top;
+    scrollbox.scrollTop = top;
+  };
+
   createEffect(() => {
     props.expanded();
     visibleChildIDs().join("|");
@@ -1267,14 +1465,7 @@ function SidebarSubagents(props: {
     showingOtherSessions();
     props.sidebarWidth?.();
 
-    if (restoreScrollTimeout) clearTimeout(restoreScrollTimeout);
-    restoreScrollTimeout = setTimeout(() => {
-      if (!props.expanded() || !scrollbox) return;
-      const top = clampedScrollTop(scrollbox, scrollRegistration.offsetTop);
-      if (top > 0 && scrollbox.scrollTop !== top) {
-        scrollbox.scrollTop = top;
-      }
-    }, 0);
+    restorePreservedScroll();
   });
 
   const ChildRow = (rowProps: { childID: string }) => {
@@ -1305,7 +1496,6 @@ function SidebarSubagents(props: {
     const rowOpacity = createMemo(() =>
       status() === "running" ? 1 : INACTIVE_SUBAGENT_OPACITY,
     );
-    const markerWidth = 4;
     const line = createMemo(() => {
       const currentChild = child();
       if (!currentChild) {
@@ -1315,7 +1505,7 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
       });
     });
     const terminalLine = createMemo(() => {
@@ -1325,15 +1515,18 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
       });
     });
-    const hasSecondaryLine = createMemo(() => Boolean(line().secondaryLine));
     const rowHeight = createMemo(() => {
-      if (status() !== "running") return SUBAGENTS_TERMINAL_ROW_HEIGHT;
-      return hasSecondaryLine()
-        ? SUBAGENTS_RUNNING_ROW_HEIGHT
-        : SUBAGENTS_RUNNING_ROW_HEIGHT - 1;
+      const currentChild = child();
+      if (!currentChild) return SUBAGENTS_TERMINAL_ROW_HEIGHT;
+      return subagentRowHeight({
+        child: currentChild,
+        nowMs: props.nowMs(),
+        sidebarWidth: props.sidebarWidth?.(),
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      });
     });
     const activate = () => {
       const target = targetSessionID();
@@ -1486,7 +1679,10 @@ function SidebarSubagents(props: {
       backgroundColor={listFocused() ? props.theme.backgroundPanel : undefined}
       focusable
       focused={listFocused()}
-      renderBefore={refreshListFocused}
+      renderBefore={() => {
+        refreshListFocused();
+        restorePreservedScroll();
+      }}
     >
       <box flexDirection="row">
         <text
@@ -1511,6 +1707,7 @@ function SidebarSubagents(props: {
         <scrollbox
           ref={(element) => {
             scrollbox = element;
+            restorePreservedScroll();
           }}
           height={listHeight()}
           scrollY
