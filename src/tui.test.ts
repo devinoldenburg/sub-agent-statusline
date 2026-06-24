@@ -680,6 +680,78 @@ describe("hydratePreviousSubagents", () => {
       "ses_child",
     );
   });
+
+  it("hydrates terminal parent task evidence onto the real child session", async () => {
+    const completedAt = new Date().toISOString();
+    const state = await hydrateState({
+      children: [hydratedChild],
+      parentMessages: [
+        {
+          id: "msg_parent",
+          info: {
+            id: "msg_parent",
+            role: "assistant",
+            time: { completed: completedAt },
+          },
+          parts: [
+            {
+              id: "part_task",
+              type: "tool",
+              tool: "task",
+              sessionID: "ses_parent",
+              state: {
+                status: "completed",
+                metadata: { sessionId: "ses_child" },
+                input: {
+                  description: "Hydrated child",
+                  subagent_type: "sdd-propose",
+                },
+              },
+            },
+          ],
+        },
+      ],
+      childMessages: { ses_child: [] },
+      statuses: {},
+    });
+
+    expect(state.children["ses_child"]?.status).toBe("done");
+    expect(state.children["tool:part_task"]?.status).toBe("done");
+  });
+
+  it("does not hydrate an empty child from an incidental parent text mention", async () => {
+    const state = await hydrateState({
+      children: [hydratedChild],
+      parentMessages: [
+        {
+          id: "msg_parent",
+          info: { id: "msg_parent", role: "assistant" },
+          parts: [
+            {
+              id: "part_text",
+              type: "text",
+              text: "The log mentioned ses_child, but no task metadata linked it.",
+            },
+            {
+              id: "part_task",
+              type: "tool",
+              tool: "task",
+              sessionID: "ses_parent",
+              state: {
+                status: "completed",
+                output: "unstructured log mentioned ses_child",
+                input: { description: "Unrelated task" },
+              },
+            },
+          ],
+        },
+      ],
+      childMessages: { ses_child: [] },
+      statuses: {},
+    });
+
+    expect(state.children).not.toHaveProperty("ses_child");
+  });
 });
 
 describe("probeRunningEvidence", () => {

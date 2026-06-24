@@ -27,7 +27,11 @@ import {
   onCleanup,
 } from "solid-js";
 import type { Accessor } from "solid-js";
-import { applySubagentEvent, extractChildDetails } from "./events.js";
+import {
+  applySubagentEvent,
+  extractChildDetails,
+  extractTaskToolEvidence,
+} from "./events.js";
 import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
   byPriority,
@@ -1615,10 +1619,8 @@ export async function hydratePreviousSubagents(
     const children = Array.isArray(childrenResp?.data) ? childrenResp.data : [];
     const messages = Array.isArray(messagesResp?.data) ? messagesResp.data : [];
     const allStatuses = asRecord(statusResp?.data) ?? {};
-    const parentLinkedChildIDs = collectParentLinkedChildSessionIDs(
-      messages,
-      currentSessionID,
-    );
+    const parentTaskEvidenceByChildID =
+      collectParentTaskEvidenceByChildSessionID(messages, currentSessionID);
     let childHydrationFailed = false;
     const childMessageResults: Array<
       SessionMessageSummary & { childID?: string; fetchFailed: boolean }
@@ -1677,8 +1679,9 @@ export async function hydratePreviousSubagents(
           childID: session.id,
           sessionStatus,
           childSummary,
-          parentLinkedChildIDs,
+          parentTaskEvidenceByChildID,
         });
+        const parentTaskEvidence = parentTaskEvidenceByChildID.get(session.id);
         const explicitCompletionEvidence =
           !!childSummary &&
           !childSummary.fetchFailed &&
@@ -1719,7 +1722,7 @@ export async function hydratePreviousSubagents(
         if (applySubagentEvent(next, fakeEvent)) changed = true;
 
         const resolvedStatus = resolveSessionStatusWithMessageSummary({
-          status: sessionStatus,
+          status: sessionStatus ?? parentTaskEvidence?.status,
           summary: childSummary,
         });
 
@@ -1732,7 +1735,9 @@ export async function hydratePreviousSubagents(
               next,
               session.id,
               resolvedStatus.status,
-              resolvedStatus.endedAt ?? statusEndedAt,
+              resolvedStatus.endedAt ??
+                parentTaskEvidence?.endedAt ??
+                statusEndedAt,
             )
           )
             changed = true;
@@ -1827,10 +1832,10 @@ function shouldHydrateSessionChild(input: {
   childID: string;
   sessionStatus?: ChildSessionState["status"];
   childSummary?: SessionMessageSummary;
-  parentLinkedChildIDs: ReadonlySet<string>;
+  parentTaskEvidenceByChildID: ReadonlyMap<string, ParentTaskEvidence>;
 }): boolean {
   if (input.sessionStatus) return true;
-  if (input.parentLinkedChildIDs.has(input.childID)) return true;
+  if (input.parentTaskEvidenceByChildID.has(input.childID)) return true;
 
   const summary = input.childSummary;
   if (!summary || summary.fetchFailed) return false;
@@ -1844,57 +1849,48 @@ function shouldHydrateSessionChild(input: {
   );
 }
 
-function collectParentLinkedChildSessionIDs(
+type ParentTaskEvidence = {
+  status: ChildSessionState["status"];
+  endedAt?: string;
+};
+
+function collectParentTaskEvidenceByChildSessionID(
   messages: unknown[],
   parentSessionID: string,
-): Set<string> {
-  const ids = new Set<string>();
+): Map<string, ParentTaskEvidence> {
+  const evidenceByID = new Map<string, ParentTaskEvidence>();
   for (const rawMessage of messages) {
     const message = asRecord(rawMessage);
+    const info = asRecord(message?.info);
     const parts = Array.isArray(message?.parts) ? message.parts : [];
     for (const rawPart of parts) {
-      collectLinkedSessionIDs(rawPart, ids);
+      const part = asRecord(rawPart);
+      if (!part || part.type !== "tool" || part.tool !== "task") continue;
+      const state = asRecord(part.state);
+      const metadata = asRecord(state?.metadata);
+      const childID =
+        typeof metadata?.sessionId === "string"
+          ? metadata.sessionId
+          : undefined;
+      if (!childID || childID === parentSessionID) continue;
+
+      const taskEvidence = extractTaskToolEvidence({
+        type: "message.part.updated",
+        properties: {
+          sessionID: parentSessionID,
+          info: {
+            time: info?.time,
+          },
+          part: rawPart,
+        },
+      });
+      evidenceByID.set(childID, {
+        status: taskEvidence?.status ?? "running",
+        endedAt: taskEvidence?.endedAt,
+      });
     }
   }
-  ids.delete(parentSessionID);
-  return ids;
-}
-
-function collectLinkedSessionIDs(
-  value: unknown,
-  target: Set<string>,
-  depth = 0,
-): void {
-  if (depth > 4 || !value) return;
-
-  if (typeof value === "string") {
-    for (const match of value.matchAll(/\bses_[a-zA-Z0-9_-]+\b/g)) {
-      const id = match[0];
-      if (id) target.add(id);
-    }
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) collectLinkedSessionIDs(item, target, depth + 1);
-    return;
-  }
-
-  const record = asRecord(value);
-  if (!record) return;
-
-  for (const [key, nested] of Object.entries(record)) {
-    const normalized = key.toLowerCase();
-    if (
-      normalized.includes("session") ||
-      normalized === "output" ||
-      normalized === "metadata"
-    ) {
-      collectLinkedSessionIDs(nested, target, depth + 1);
-    } else if (Array.isArray(nested) || asRecord(nested)) {
-      collectLinkedSessionIDs(nested, target, depth + 1);
-    }
-  }
+  return evidenceByID;
 }
 
 async function safeReadAsync<Value>(
@@ -2339,9 +2335,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     if (!routeSessionID) return;
 
     const sessionID = routeSessionID;
-    const currentAttempts = hydrateRetryAttempts().get(sessionID) ?? 0;
     if (
-      currentAttempts >= HYDRATE_RETRY_MAX_ATTEMPTS ||
       hydratedSessions().has(sessionID) ||
       hydratingSessions().has(sessionID) ||
       hydrateRetryPendingSessions().has(sessionID)
@@ -2388,17 +2382,6 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
       }
 
       const attempts = hydrateRetryAttempts().get(sessionID) ?? 0;
-      if (attempts >= HYDRATE_RETRY_MAX_ATTEMPTS) {
-        setHydrateRetryPendingSessions((prev) => {
-          if (!prev.has(sessionID)) return prev;
-          const next = new Set(prev);
-          next.delete(sessionID);
-          return next;
-        });
-        clearHydrateRetryTimeout(sessionID);
-        finishHydrating();
-        return;
-      }
 
       const delayMs = Math.min(
         HYDRATE_RETRY_MAX_DELAY_MS,
@@ -2407,7 +2390,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
 
       setHydrateRetryAttempts((prev) => {
         const next = new Map(prev);
-        next.set(sessionID, attempts + 1);
+        next.set(sessionID, Math.min(attempts + 1, HYDRATE_RETRY_MAX_ATTEMPTS));
         return next;
       });
 
