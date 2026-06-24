@@ -80,6 +80,34 @@ async function hydrateState(input: {
 }
 
 describe("TUI subagent snapshots", () => {
+  it("does not show other-session rows by default when current session has no executions", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "ses_other_running",
+        title: "Other session running",
+        source: "session",
+        parentID: "ses_other",
+        targetSessionID: "ses_other_running",
+        messageID: "msg_other_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+    ]);
+
+    const snapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_current",
+      nowMs,
+    });
+
+    expect(snapshot.showingOtherSessions).toBe(false);
+    expect(snapshot.visibleChildren).toEqual([]);
+    expect(snapshot.visibleCounts).toEqual({ running: 0, done: 0, error: 0 });
+    expect(snapshot.totalExecuted).toBe(0);
+  });
+
   it("keeps retained terminal counters separate from default visible rows", () => {
     const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
     const retainedDone = Array.from({ length: 6 }, (_, index) =>
@@ -688,6 +716,234 @@ describe("probeRunningEvidence", () => {
     expect(evidence.status).toBe("error");
     expect(api.client.session.status).toHaveBeenCalledOnce();
     expect(api.client.session.messages).not.toHaveBeenCalled();
+  });
+});
+
+describe("TUI subagent hydration", () => {
+  async function hydrateWith(input: {
+    initialChildren?: ChildSessionState[];
+    children: unknown[];
+    statuses?: Record<string, unknown>;
+    messagesBySession?: Record<string, unknown[]>;
+    failMessagesFor?: string[];
+    failStatus?: boolean;
+  }): Promise<StatuslineState> {
+    let state = stateWith(input.initialChildren ?? []);
+    const directory = await mkdtemp(join(tmpdir(), "subagent-tui-hydrate-"));
+    const api = {
+      state: {
+        path: { directory },
+        session: {
+          status: vi.fn(),
+          messages: vi.fn(),
+        },
+        part: vi.fn(),
+      },
+      client: {
+        session: {
+          children: vi.fn(async () => ({ data: input.children })),
+          messages: vi.fn(async ({ sessionID }: { sessionID: string }) => {
+            if (input.failMessagesFor?.includes(sessionID)) {
+              throw new Error(`failed to read messages for ${sessionID}`);
+            }
+            return { data: input.messagesBySession?.[sessionID] ?? [] };
+          }),
+          status: vi.fn(async () => {
+            if (input.failStatus) {
+              throw new Error("failed to read statuses");
+            }
+            return { data: input.statuses ?? {} };
+          }),
+        },
+      },
+    };
+
+    await hydratePreviousSubagents(
+      api as never,
+      "ses_parent",
+      join(directory, "state.json"),
+      join(directory, "status.txt"),
+      (fn) => {
+        state = fn(state);
+      },
+    );
+
+    return state;
+  }
+
+  it("does not leave visible running rows from historical children without status evidence", async () => {
+    const state = await hydrateWith({
+      initialChildren: [
+        child({
+          id: "ses_child_historical",
+          parentID: "ses_parent",
+          title: "Historical child",
+          source: "session",
+          targetSessionID: "ses_child_historical",
+          status: "running",
+        }),
+      ],
+      children: [
+        {
+          id: "ses_child_historical",
+          parentID: "ses_parent",
+          title: "Historical child",
+          time: { created: "2026-04-30T10:00:00.000Z" },
+        },
+      ],
+      statuses: {},
+    });
+
+    const snapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs: Date.parse("2026-04-30T10:20:00.000Z"),
+    });
+
+    expect(Object.keys(state.children)).toEqual([]);
+    expect(snapshot.visibleChildren).toEqual([]);
+    expect(snapshot.visibleCounts).toEqual({ running: 0, done: 0, error: 0 });
+    expect(snapshot.totalExecuted).toBe(0);
+  });
+
+  it("preserves an existing running row when child-message evidence fails", async () => {
+    const state = await hydrateWith({
+      initialChildren: [
+        child({
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          source: "session",
+          targetSessionID: "ses_child_running",
+          status: "running",
+        }),
+      ],
+      children: [
+        {
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          time: { created: "2026-04-30T10:00:00.000Z" },
+        },
+      ],
+      statuses: {},
+      failMessagesFor: ["ses_child_running"],
+    });
+
+    expect(state.children.ses_child_running?.status).toBe("running");
+  });
+
+  it("preserves an existing running row when parent-message evidence fails", async () => {
+    const state = await hydrateWith({
+      initialChildren: [
+        child({
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          source: "session",
+          targetSessionID: "ses_child_running",
+          status: "running",
+        }),
+      ],
+      children: [
+        {
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          time: { created: "2026-04-30T10:00:00.000Z" },
+        },
+      ],
+      statuses: {},
+      failMessagesFor: ["ses_parent"],
+    });
+
+    expect(state.children.ses_child_running?.status).toBe("running");
+  });
+
+  it("preserves an existing current-session running row when status hydration fails", async () => {
+    const state = await hydrateWith({
+      initialChildren: [
+        child({
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          source: "session",
+          targetSessionID: "ses_child_running",
+          status: "running",
+        }),
+      ],
+      children: [
+        {
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          time: { created: "2026-04-30T10:00:00.000Z" },
+        },
+      ],
+      messagesBySession: {
+        ses_parent: [],
+        ses_child_running: [],
+      },
+      failStatus: true,
+    });
+
+    const snapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs: Date.parse("2026-04-30T10:20:00.000Z"),
+    });
+
+    expect(state.children.ses_child_running?.status).toBe("running");
+    expect(snapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_child_running",
+    ]);
+  });
+
+  it("hydrates a visible running row when child status is explicitly busy", async () => {
+    const state = await hydrateWith({
+      children: [
+        {
+          id: "ses_child_running",
+          parentID: "ses_parent",
+          title: "Running child",
+          time: { created: "2026-04-30T10:00:00.000Z" },
+        },
+      ],
+      statuses: { ses_child_running: { status: "busy" } },
+    });
+
+    const snapshot = resolveTuiSubagentSnapshot({
+      state,
+      sessionID: "ses_parent",
+      nowMs: Date.parse("2026-04-30T10:20:00.000Z"),
+    });
+
+    expect(snapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_child_running",
+    ]);
+    expect(snapshot.visibleCounts).toEqual({ running: 1, done: 0, error: 0 });
+    expect(snapshot.totalExecuted).toBe(1);
+  });
+
+  it("hydrates terminal child statuses without leaving them running", async () => {
+    const updatedAt = new Date().toISOString();
+    const state = await hydrateWith({
+      children: [
+        {
+          id: "ses_child_done",
+          parentID: "ses_parent",
+          title: "Done child",
+          time: {
+            created: "2026-04-30T10:00:00.000Z",
+            updated: updatedAt,
+          },
+        },
+      ],
+      statuses: { ses_child_done: { status: "idle" } },
+    });
+
+    expect(state.children.ses_child_done?.status).toBe("done");
+    expect(state.children.ses_child_done?.endedAt).toBe(updatedAt);
   });
 });
 

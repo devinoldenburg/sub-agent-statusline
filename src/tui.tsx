@@ -1029,7 +1029,6 @@ function SidebarSubagents(props: {
       sessionID: props.sessionID,
       nowMs: props.nowMs(),
       ...completedHistoryOptions(),
-      fallbackToOtherSessions: true,
     }),
   );
   const visibleChildren = createMemo(() => snapshot().visibleChildren);
@@ -1571,6 +1570,7 @@ export async function hydratePreviousSubagents(
     const sessionClient = api.client.session;
     let topLevelHydrationFailed = false;
     let statusHydrationFailed = false;
+    let parentMessageHydrationFailed = false;
 
     const [childrenResp, messagesResp, statusResp] = await Promise.all([
       (async () => {
@@ -1592,7 +1592,10 @@ export async function hydratePreviousSubagents(
               directory,
             }) ?? Promise.resolve({ data: [] }),
         );
-        if (!response) topLevelHydrationFailed = true;
+        if (!response) {
+          topLevelHydrationFailed = true;
+          parentMessageHydrationFailed = true;
+        }
         return response;
       })(),
       (async () => {
@@ -1670,26 +1673,12 @@ export async function hydratePreviousSubagents(
         const status = allStatuses[session.id];
         const sessionStatus = deriveSessionChildStatus(status);
         const childSummary = childMessageSummaryByID.get(session.id);
-        if (
-          !shouldHydrateSessionChild({
-            childID: session.id,
-            sessionStatus,
-            childSummary,
-            parentLinkedChildIDs,
-          })
-        ) {
-          continue;
-        }
-
-        const fakeEvent = {
-          type: "session.created",
-          properties: {
-            sessionID: session.id,
-            info: session,
-          },
-        };
-        if (applySubagentEvent(next, fakeEvent)) changed = true;
-
+        const hasHydrationEvidence = shouldHydrateSessionChild({
+          childID: session.id,
+          sessionStatus,
+          childSummary,
+          parentLinkedChildIDs,
+        });
         const explicitCompletionEvidence =
           !!childSummary &&
           !childSummary.fetchFailed &&
@@ -1701,6 +1690,33 @@ export async function hydratePreviousSubagents(
           fallbackEndedAt ??
           sessionTimestamp(session, "completed") ??
           sessionTimestamp(session, "updated");
+        const shouldHydrateChildFromSession = hasHydrationEvidence;
+
+        if (!shouldHydrateChildFromSession) {
+          const existing = next.children[session.id];
+          if (
+            !statusHydrationFailed &&
+            !parentMessageHydrationFailed &&
+            !!childSummary &&
+            !childSummary.fetchFailed &&
+            existing?.parentID === currentSessionID &&
+            existing.source === "session" &&
+            existing.status === "running"
+          ) {
+            delete next.children[session.id];
+            changed = true;
+          }
+          continue;
+        }
+
+        const fakeEvent = {
+          type: "session.created",
+          properties: {
+            sessionID: session.id,
+            info: session,
+          },
+        };
+        if (applySubagentEvent(next, fakeEvent)) changed = true;
 
         const resolvedStatus = resolveSessionStatusWithMessageSummary({
           status: sessionStatus,
