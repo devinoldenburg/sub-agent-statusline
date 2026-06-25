@@ -59,12 +59,33 @@ Restart OpenCode after editing the file.
 The TUI plugin adds a sidebar section that shows:
 
 - running subagents
-- completed subagents
+- recent completed subagents, with a manual completed history toggle for retained older completions
 - failed subagents
 - elapsed time
 - token/context usage when available
 
 It also adds a small home/footer summary when there is active subagent activity.
+
+## 1.0 public contract
+
+For 1.x releases, the stable user-facing contract is:
+
+- npm package name: `opencode-subagent-statusline`;
+- TUI plugin entrypoints: `opencode-subagent-statusline` and `opencode-subagent-statusline/tui`;
+- OpenCode `tui.json` plugin configuration;
+- visible sidebar and home/footer behavior;
+- command palette entry, `Alt+B`, and focused-list navigation;
+- local privacy and persistence behavior described in this README;
+- Node, peer dependency, and install contract declared in `package.json`.
+
+Experimental or internal surfaces may change in 1.x without a SemVer-major bump:
+
+- `opencode-subagent-statusline/runtime`, intended for diagnostics and file-based runtime experiments;
+- diagnostic environment variables;
+- exact `state.json` schema and `status.txt` format;
+- internal source modules and source-level exports.
+
+Use the TUI plugin entrypoints for normal OpenCode usage.
 
 ## Keyboard navigation
 
@@ -78,6 +99,7 @@ navigation shortcuts are handled only while the sidebar list is focused.
 | `j` / `ArrowDown`  | Move selection to the next visible subagent.                   |
 | `k` / `ArrowUp`    | Move selection to the previous visible subagent.               |
 | `Enter`            | Open the selected subagent session.                            |
+| `c`                | Toggle retained completed history in the sidebar.              |
 | `h` / `ArrowLeft`  | Collapse the subagent section.                                 |
 | `l` / `ArrowRight` | Expand the subagent section.                                   |
 | `Esc`              | Leave list focus mode and return to the prompt.                |
@@ -85,39 +107,15 @@ navigation shortcuts are handled only while the sidebar list is focused.
 Opening a selected session is a no-op when there is no visible or navigable
 subagent.
 
+Click `Σ` in the sidebar aggregate row to toggle completed history with the
+mouse. The toggle is not persisted; it resets when OpenCode or the plugin is
+reloaded. Completed history is bounded retained history, not a full database:
+terminal rows are kept for up to 3 days with a 1,500-row cap, and rows already
+pruned from state are not restored.
+
 When a child session is opened from the sidebar, returning with OpenCode `Up`
 (`session_parent`) moves keyboard focus to the parent prompt so you can type
 immediately.
-
-## Configuration
-
-The plugin keeps conservative reconciliation defaults so long-running child
-sessions are not treated as stale just because they have been quiet for a while.
-Short-lived automation environments can opt into faster stale-child cleanup with
-environment variables before launching OpenCode:
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `OPENCODE_SUBAGENT_STATUSLINE_STALE_RUNNING_MS` | `36000000` | Inactive running child age before safe stale fallback can close it. |
-| `OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INTERVAL_MS` | `600000` | How often the TUI runs stale-running reconciliation maintenance. |
-| `OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INITIAL_BACKOFF_MS` | `15000` | First retry backoff for unresolved reconciliation probes. |
-| `OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MAX_BACKOFF_MS` | `300000` | Maximum retry backoff for unresolved reconciliation probes. |
-| `OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MESSAGE_AGE_GATE_MS` | `60000` | Minimum child age before message inspection can close stale work. |
-| `OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_OLD_CANDIDATE_AGE_MS` | `300000` | Age after which old running children are considered for probing. |
-| `OPENCODE_SUBAGENT_STATUSLINE_CLOCK_ICON` | `t` | Single-character label shown before elapsed time. |
-| `OPENCODE_SUBAGENT_STATUSLINE_TOKEN_ICON` | `#` | Single-character label shown before token/context usage. |
-
-For fast local runners where subagent work normally completes within minutes,
-an aggressive profile can use values such as:
-
-```sh
-OPENCODE_SUBAGENT_STATUSLINE_STALE_RUNNING_MS=300000
-OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INTERVAL_MS=30000
-OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INITIAL_BACKOFF_MS=5000
-OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MAX_BACKOFF_MS=60000
-OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MESSAGE_AGE_GATE_MS=30000
-OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_OLD_CANDIDATE_AGE_MS=60000
-```
 
 ---
 
@@ -167,6 +165,7 @@ Package entrypoints:
 ```txt
 opencode-subagent-statusline          -> TUI plugin
 opencode-subagent-statusline/tui      -> TUI plugin
+opencode-subagent-statusline/runtime  -> experimental/diagnostic runtime mode
 ```
 
 Useful commands:

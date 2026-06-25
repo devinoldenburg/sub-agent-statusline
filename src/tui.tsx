@@ -27,7 +27,11 @@ import {
   onCleanup,
 } from "solid-js";
 import type { Accessor } from "solid-js";
-import { applySubagentEvent, extractChildDetails } from "./events.js";
+import {
+  applySubagentEvent,
+  extractChildDetails,
+  extractTaskToolEvidence,
+} from "./events.js";
 import { readOpenCodeLogFileIfSmall } from "./logs.js";
 import {
   byPriority,
@@ -43,12 +47,14 @@ import {
   nextBackoffState,
   parseStaleRunningThresholdMs as parseConfiguredStaleRunningThresholdMs,
   resolvePersistedStaleSubtaskFromParentMessages,
+  resolveSessionStatusWithMessageSummary,
   shouldApplyStaleRunningFallback,
   shouldSkipCandidateForBackoff,
   summarizeSessionMessages,
   type PersistedStaleSubtaskCandidate,
   type RunningReconcileCacheEntry,
   type RunningReconcileEvidence,
+  type SessionMessageSummary,
 } from "./reconcile.js";
 import {
   focusPromptWithDeferredRetry,
@@ -56,6 +62,8 @@ import {
 } from "./tui-focus.js";
 import {
   createEmptyState,
+  countHistoricalSubagentExecutions,
+  countRetainedSubagentStatuses,
   markChildStatus,
   refreshDerivedFields,
   resolveStatePath,
@@ -65,6 +73,7 @@ import {
   upsertChildDetails,
   type ChildTokenState,
   type ChildSessionState,
+  type StatusCounts,
   type StatuslineState,
 } from "./state.js";
 import { registerSubagentCommands } from "./tui-commands.js";
@@ -80,14 +89,14 @@ const DONE_TOKEN_REHYDRATE_MAX_ATTEMPTS = 15;
 const HYDRATE_RETRY_BASE_DELAY_MS = 1000;
 const HYDRATE_RETRY_MAX_DELAY_MS = 30_000;
 const HYDRATE_RETRY_MAX_ATTEMPTS = 6;
-const DEFAULT_RUNNING_RECONCILE_MAINTENANCE_INTERVAL_MS = 10 * 60_000;
+const RUNNING_RECONCILE_MAINTENANCE_INTERVAL_MS = 10 * 60_000;
 const RUNNING_RECONCILE_MAX_CANDIDATES = 8;
-const DEFAULT_RUNNING_RECONCILE_INITIAL_BACKOFF_MS = 15_000;
-const DEFAULT_RUNNING_RECONCILE_MAX_BACKOFF_MS = 5 * 60_000;
-const DEFAULT_RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS = 60_000;
-const DEFAULT_RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS = 5 * 60_000;
-const DEFAULT_CLOCK_ICON = "t";
-const DEFAULT_TOKEN_ICON = "#";
+const RUNNING_RECONCILE_INITIAL_BACKOFF_MS = 15_000;
+const RUNNING_RECONCILE_MAX_BACKOFF_MS = 5 * 60_000;
+const RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS = 60_000;
+const RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS = 5 * 60_000;
+const CLOCK_ICON = "";
+const TOKEN_ICON = "";
 const SIDEBAR_ARROW_EXPANDED = "▼";
 const SIDEBAR_ARROW_COLLAPSED = "▶";
 const SUBAGENTS_EXPANDED_KV_KEY = "subagents.sidebar.expanded";
@@ -96,6 +105,7 @@ const SUBAGENTS_MAX_VISIBLE_ROWS = 5;
 const SUBAGENTS_RUNNING_ROW_HEIGHT = 3;
 const SUBAGENTS_TERMINAL_ROW_HEIGHT = 2;
 const SUBAGENTS_ROW_GAP = 0;
+const SUBAGENTS_ROW_MARKER_WIDTH = 4;
 const SUBAGENTS_MAX_LIST_HEIGHT =
   SUBAGENTS_MAX_VISIBLE_ROWS * SUBAGENTS_RUNNING_ROW_HEIGHT +
   (SUBAGENTS_MAX_VISIBLE_ROWS - 1) * SUBAGENTS_ROW_GAP;
@@ -119,7 +129,22 @@ const PLUGIN_VERSION = readPluginVersion();
 
 interface SidebarScrollRegistration {
   getScrollbox: () => ScrollBoxRenderable | undefined;
+  getAnchor: () => SidebarScrollAnchor | undefined;
+  getRows: () => SidebarScrollRowLayout[];
+  getLeadingHeight: () => number;
   offsetTop: number;
+  anchor?: SidebarScrollAnchor;
+  restoreFramesRemaining: number;
+}
+
+export interface SidebarScrollAnchor {
+  childIDs: string[];
+  intraRowOffset: number;
+}
+
+export interface SidebarScrollRowLayout {
+  id: string;
+  height: number;
 }
 
 interface SidebarListFocusRegistration {
@@ -128,8 +153,15 @@ interface SidebarListFocusRegistration {
   isListFocusModeActive: () => boolean;
 }
 
+interface SidebarCompletedHistoryRegistration {
+  toggleCompletedHistory: () => boolean;
+}
+
 const sidebarScrollRegistrations = new Set<SidebarScrollRegistration>();
 const sidebarListFocusRegistrations = new Set<SidebarListFocusRegistration>();
+const sidebarCompletedHistoryRegistrations =
+  new Set<SidebarCompletedHistoryRegistration>();
+const SIDEBAR_SCROLL_RESTORE_FRAME_BUDGET = 2;
 
 function focusVisibleSidebarSubagentList(preferredChildID?: string): boolean {
   for (const registration of [...sidebarListFocusRegistrations].reverse()) {
@@ -151,6 +183,15 @@ function isAnySidebarSubagentListFocused(): boolean {
   );
 }
 
+function toggleVisibleSidebarCompletedHistory(): boolean {
+  for (const registration of [
+    ...sidebarCompletedHistoryRegistrations,
+  ].reverse()) {
+    if (registration.toggleCompletedHistory()) return true;
+  }
+  return false;
+}
+
 function maxScrollTop(scrollbox: ScrollBoxRenderable): number {
   return Math.max(0, scrollbox.scrollHeight - scrollbox.viewport.height);
 }
@@ -167,7 +208,89 @@ function snapshotSidebarScrollOffsets(): void {
     const scrollbox = registration.getScrollbox();
     if (!scrollbox) continue;
     registration.offsetTop = clampedScrollTop(scrollbox, scrollbox.scrollTop);
+    registration.anchor = registration.getAnchor();
+    registration.restoreFramesRemaining = SIDEBAR_SCROLL_RESTORE_FRAME_BUDGET;
   }
+}
+
+function resolveSidebarAnchorScrollTop(input: {
+  expanded: boolean;
+  anchor?: SidebarScrollAnchor;
+  rows: SidebarScrollRowLayout[];
+  leadingHeight: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): { matched: boolean; offsetTop?: number; scrollTop?: number } {
+  if (!input.expanded || !input.anchor || input.anchor.childIDs.length === 0) {
+    return { matched: false };
+  }
+
+  let top = input.leadingHeight;
+  const rowTops = new Map<string, number>();
+  for (const row of input.rows) {
+    rowTops.set(row.id, top);
+    top += row.height + SUBAGENTS_ROW_GAP;
+  }
+
+  for (const [index, childID] of input.anchor.childIDs.entries()) {
+    const rowTop = rowTops.get(childID);
+    if (rowTop === undefined) continue;
+
+    const desiredTop = rowTop + (index === 0 ? input.anchor.intraRowOffset : 0);
+    const maxTop = Math.max(0, input.scrollHeight - input.viewportHeight);
+    const nextTop = Math.max(0, Math.min(desiredTop, maxTop));
+    return {
+      matched: true,
+      offsetTop: nextTop,
+      scrollTop: input.scrollTop !== nextTop ? nextTop : undefined,
+    };
+  }
+
+  return { matched: false };
+}
+
+export function preservedSidebarAnchorScrollTop(input: {
+  expanded: boolean;
+  anchor?: SidebarScrollAnchor;
+  rows: SidebarScrollRowLayout[];
+  leadingHeight?: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): number | undefined {
+  return resolveSidebarAnchorScrollTop({
+    ...input,
+    leadingHeight: input.leadingHeight ?? 0,
+  }).scrollTop;
+}
+
+export function preservedSidebarScrollTop(input: {
+  expanded: boolean;
+  offsetTop: number;
+  anchor?: SidebarScrollAnchor;
+  rows?: SidebarScrollRowLayout[];
+  leadingHeight?: number;
+  scrollTop: number;
+  scrollHeight: number;
+  viewportHeight: number;
+}): number | undefined {
+  if (!input.expanded) return undefined;
+
+  const anchorTop = resolveSidebarAnchorScrollTop({
+    expanded: input.expanded,
+    anchor: input.anchor,
+    rows: input.rows ?? [],
+    leadingHeight: input.leadingHeight ?? 0,
+    scrollTop: input.scrollTop,
+    scrollHeight: input.scrollHeight,
+    viewportHeight: input.viewportHeight,
+  });
+  if (anchorTop.matched) return anchorTop.scrollTop;
+
+  const maxTop = Math.max(0, input.scrollHeight - input.viewportHeight);
+  const top = Math.max(0, Math.min(input.offsetTop, maxTop));
+  return top > 0 && input.scrollTop !== top ? top : undefined;
 }
 
 type SidebarContentContext = TuiSlotContext & { session_id?: string };
@@ -624,7 +747,7 @@ function resolveSyntheticTargetFromHydratedState(
   return undefined;
 }
 
-function backfillHydratedTargetSessionIDs(
+export function backfillHydratedTargetSessionIDs(
   state: StatuslineState,
   parentSessionID: string,
 ): boolean {
@@ -679,52 +802,7 @@ function parseStaleRunningThresholdMs(): number {
   );
 }
 
-function parsePositiveMsEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (typeof raw !== "string" || raw.trim().length === 0) return fallback;
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-}
-
-function parseSingleCharEnv(name: string, fallback: string): string {
-  const raw = process.env[name];
-  if (typeof raw !== "string") return fallback;
-
-  const [first] = Array.from(raw.trim());
-  return first || fallback;
-}
-
 const STALE_RUNNING_THRESHOLD_MS = parseStaleRunningThresholdMs();
-const RUNNING_RECONCILE_MAINTENANCE_INTERVAL_MS = parsePositiveMsEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INTERVAL_MS",
-  DEFAULT_RUNNING_RECONCILE_MAINTENANCE_INTERVAL_MS,
-);
-const RUNNING_RECONCILE_INITIAL_BACKOFF_MS = parsePositiveMsEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_INITIAL_BACKOFF_MS",
-  DEFAULT_RUNNING_RECONCILE_INITIAL_BACKOFF_MS,
-);
-const RUNNING_RECONCILE_MAX_BACKOFF_MS = parsePositiveMsEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MAX_BACKOFF_MS",
-  DEFAULT_RUNNING_RECONCILE_MAX_BACKOFF_MS,
-);
-const RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS = parsePositiveMsEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_MESSAGE_AGE_GATE_MS",
-  DEFAULT_RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS,
-);
-const RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS = parsePositiveMsEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_RECONCILE_OLD_CANDIDATE_AGE_MS",
-  DEFAULT_RUNNING_RECONCILE_OLD_CANDIDATE_AGE_MS,
-);
-const CLOCK_ICON = parseSingleCharEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_CLOCK_ICON",
-  DEFAULT_CLOCK_ICON,
-);
-const TOKEN_ICON = parseSingleCharEnv(
-  "OPENCODE_SUBAGENT_STATUSLINE_TOKEN_ICON",
-  DEFAULT_TOKEN_ICON,
-);
 
 function resolveSidebarWidth(ctx: unknown): number | undefined {
   const source = asRecord(ctx);
@@ -959,10 +1037,91 @@ function formatTerminalChildRowLine(input: {
   };
 }
 
-function subagentRowHeight(child: ChildSessionState): number {
-  return child.status === "running"
+export function subagentRowHeight(input: {
+  child: ChildSessionState;
+  nowMs: number;
+  sidebarWidth?: number;
+  reservedWidth?: number;
+}): number {
+  if (input.child.status !== "running") return SUBAGENTS_TERMINAL_ROW_HEIGHT;
+
+  const line = formatChildRowLine(input);
+  return line.secondaryLine
     ? SUBAGENTS_RUNNING_ROW_HEIGHT
-    : SUBAGENTS_TERMINAL_ROW_HEIGHT;
+    : SUBAGENTS_RUNNING_ROW_HEIGHT - 1;
+}
+
+export interface TuiSubagentSnapshot {
+  visibleChildren: ChildSessionState[];
+  visibleCounts: StatusCounts;
+  totalExecuted: number;
+  showingOtherSessions: boolean;
+}
+
+export function resolveTuiSubagentSnapshot(input: {
+  state: StatuslineState;
+  sessionID?: string;
+  nowMs?: number;
+  showCompletedHistory?: boolean;
+  fallbackToOtherSessions?: boolean;
+}): TuiSubagentSnapshot {
+  const allChildren = Object.values(input.state.children);
+  const options = { showCompletedHistory: input.showCompletedHistory };
+  const nowMs = input.nowMs ?? Date.now();
+  const ownChildren = input.sessionID
+    ? allChildren.filter((child) => child.parentID === input.sessionID)
+    : allChildren;
+  const otherChildren = input.sessionID
+    ? allChildren.filter((child) => child.parentID !== input.sessionID)
+    : [];
+  const ownVisibleChildren = visibleSubagentWorkItems(
+    ownChildren,
+    nowMs,
+    options,
+  ).sort(byPriority);
+  const otherVisibleChildren =
+    input.sessionID && input.fallbackToOtherSessions
+      ? visibleSubagentWorkItems(otherChildren, nowMs, options).sort(byPriority)
+      : [];
+  const ownTotalExecuted = countHistoricalSubagentExecutions({
+    children: allChildren,
+    parentSessionID: input.sessionID,
+  });
+  const showingOtherSessions =
+    ownVisibleChildren.length === 0 &&
+    ownTotalExecuted === 0 &&
+    otherVisibleChildren.length > 0;
+  const visibleChildren = showingOtherSessions
+    ? otherVisibleChildren
+    : ownVisibleChildren;
+  const retainedCountChildren = showingOtherSessions
+    ? otherChildren
+    : allChildren;
+  const totalExecuted = showingOtherSessions
+    ? countHistoricalSubagentExecutions({ children: otherChildren })
+    : ownTotalExecuted;
+
+  return {
+    visibleChildren,
+    visibleCounts: countRetainedSubagentStatuses({
+      children: retainedCountChildren,
+      parentSessionID: showingOtherSessions ? undefined : input.sessionID,
+    }),
+    totalExecuted,
+    showingOtherSessions,
+  };
+}
+
+export function resolveSidebarSubagentSnapshot(input: {
+  state: StatuslineState;
+  sessionID: string;
+  nowMs?: number;
+  showCompletedHistory?: boolean;
+}): TuiSubagentSnapshot {
+  return resolveTuiSubagentSnapshot({
+    ...input,
+    fallbackToOtherSessions: true,
+  });
 }
 
 function SidebarSubagents(props: {
@@ -983,44 +1142,22 @@ function SidebarSubagents(props: {
   sidebarWidth?: () => number | undefined;
   theme: TuiThemeCurrent;
 }) {
-  const children = createMemo(() =>
-    visibleSubagentWorkItems(
-      Object.values(props.state().children).filter(
-        (child) => child.parentID === props.sessionID,
-      ),
-      props.nowMs(),
-    ).sort(byPriority),
-  );
-
-  const otherChildren = createMemo(() =>
-    visibleSubagentWorkItems(
-      Object.values(props.state().children).filter(
-        (child) => child.parentID !== props.sessionID,
-      ),
-      props.nowMs(),
-    ).sort(byPriority),
-  );
-
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of children()) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
+  const [showCompletedHistory, setShowCompletedHistory] = createSignal(false);
+  const completedHistoryOptions = () => ({
+    showCompletedHistory: showCompletedHistory(),
   });
-  const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
-
-  const visibleChildren = createMemo(() => {
-    const ownChildren = children();
-    if (ownChildren.length > 0) return ownChildren;
-    return otherChildren();
-  });
-
-  const showingOtherSessions = createMemo(
-    () => children().length === 0 && otherChildren().length > 0,
+  const snapshot = createMemo(() =>
+    resolveSidebarSubagentSnapshot({
+      state: props.state(),
+      sessionID: props.sessionID,
+      nowMs: props.nowMs(),
+      ...completedHistoryOptions(),
+    }),
   );
+  const visibleChildren = createMemo(() => snapshot().visibleChildren);
+  const counts = createMemo(() => snapshot().visibleCounts);
+  const totalExecuted = createMemo(() => snapshot().totalExecuted);
+  const showingOtherSessions = createMemo(() => snapshot().showingOtherSessions);
 
   const visibleChildIDs = createMemo(() =>
     visibleChildren().map((child) => child.id),
@@ -1050,9 +1187,18 @@ function SidebarSubagents(props: {
   );
 
   const listHeight = createMemo(() => {
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
     const contentHeight =
       visibleChildren().reduce(
-        (height, child) => height + subagentRowHeight(child),
+        (height, child) =>
+          height +
+          subagentRowHeight({
+            child,
+            nowMs,
+            sidebarWidth,
+            reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+          }),
         showingOtherSessions() ? 1 : 0,
       ) +
       Math.max(0, visibleChildren().length - 1) * SUBAGENTS_ROW_GAP;
@@ -1062,10 +1208,13 @@ function SidebarSubagents(props: {
 
   let listContainer: BoxRenderable | undefined;
   let scrollbox: ScrollBoxRenderable | undefined;
-  let restoreScrollTimeout: ReturnType<typeof setTimeout> | undefined;
   const scrollRegistration: SidebarScrollRegistration = {
     getScrollbox: () => scrollbox,
+    getAnchor: () => currentSidebarScrollAnchor(),
+    getRows: () => rowLayouts(),
+    getLeadingHeight: () => (showingOtherSessions() ? 1 : 0),
     offsetTop: 0,
+    restoreFramesRemaining: 0,
   };
   sidebarScrollRegistrations.add(scrollRegistration);
   const focusRegistration: SidebarListFocusRegistration = {
@@ -1092,10 +1241,17 @@ function SidebarSubagents(props: {
     isListFocusModeActive: () => listFocusModeActive(),
   };
   sidebarListFocusRegistrations.add(focusRegistration);
+  const completedHistoryRegistration: SidebarCompletedHistoryRegistration = {
+    toggleCompletedHistory: () => {
+      setShowCompletedHistory((current) => !current);
+      return true;
+    },
+  };
+  sidebarCompletedHistoryRegistrations.add(completedHistoryRegistration);
   onCleanup(() => {
     sidebarScrollRegistrations.delete(scrollRegistration);
     sidebarListFocusRegistrations.delete(focusRegistration);
-    if (restoreScrollTimeout) clearTimeout(restoreScrollTimeout);
+    sidebarCompletedHistoryRegistrations.delete(completedHistoryRegistration);
   });
 
   createEffect(() => {
@@ -1121,35 +1277,94 @@ function SidebarSubagents(props: {
 
   const rowTopForIndex = (index: number): number => {
     let top = showingOtherSessions() ? 1 : 0;
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
     for (let i = 0; i < index; i += 1) {
       const child = visibleChildren()[i];
-      if (child) top += subagentRowHeight(child) + SUBAGENTS_ROW_GAP;
+      if (child) {
+        top +=
+          subagentRowHeight({
+            child,
+            nowMs,
+            sidebarWidth,
+            reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+          }) + SUBAGENTS_ROW_GAP;
+      }
     }
     return top;
   };
 
-  const scrollSelectedChildIntoView = (): void => {
+  const rowLayouts = (): SidebarScrollRowLayout[] => {
+    const nowMs = props.nowMs();
+    const sidebarWidth = props.sidebarWidth?.();
+    return visibleChildren().map((child) => ({
+      id: child.id,
+      height: subagentRowHeight({
+        child,
+        nowMs,
+        sidebarWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      }),
+    }));
+  };
+
+  const currentSidebarScrollAnchor = (): SidebarScrollAnchor | undefined => {
+    if (!scrollbox) return undefined;
+    const rows = rowLayouts();
+    if (rows.length === 0) return undefined;
+
+    const viewportTop = clampedScrollTop(scrollbox, scrollbox.scrollTop);
+    let top = showingOtherSessions() ? 1 : 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      if (!row) continue;
+      const rowBottom = top + row.height;
+      if (rowBottom > viewportTop) {
+        return {
+          childIDs: rows.slice(index).map((candidate) => candidate.id),
+          intraRowOffset: Math.max(0, viewportTop - top),
+        };
+      }
+      top = rowBottom + SUBAGENTS_ROW_GAP;
+    }
+
+    const lastRow = rows[rows.length - 1];
+    return lastRow ? { childIDs: [lastRow.id], intraRowOffset: 0 } : undefined;
+  };
+
+  const scrollChildIntoView = (childID: string | undefined): void => {
     if (!scrollbox) return;
-    const selectedIndex = visibleChildIDs().findIndex(
-      (id) => id === selectedChildID(),
-    );
+    const selectedIndex = visibleChildIDs().findIndex((id) => id === childID);
     if (selectedIndex < 0) return;
     const selectedChild = visibleChildren()[selectedIndex];
     if (!selectedChild) return;
 
     const rowTop = rowTopForIndex(selectedIndex);
-    const rowBottom = rowTop + subagentRowHeight(selectedChild);
+    const rowBottom =
+      rowTop +
+      subagentRowHeight({
+        child: selectedChild,
+        nowMs: props.nowMs(),
+        sidebarWidth: props.sidebarWidth?.(),
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      });
     const viewportTop = scrollbox.scrollTop;
     const viewportBottom = viewportTop + listHeight();
 
     if (rowTop < viewportTop) {
-      scrollbox.scrollTop = clampedScrollTop(scrollbox, rowTop);
+      const nextTop = clampedScrollTop(scrollbox, rowTop);
+      scrollRegistration.offsetTop = nextTop;
+      scrollbox.scrollTop = nextTop;
     } else if (rowBottom > viewportBottom) {
-      scrollbox.scrollTop = clampedScrollTop(
-        scrollbox,
-        rowBottom - listHeight(),
-      );
+      const nextTop = clampedScrollTop(scrollbox, rowBottom - listHeight());
+      scrollRegistration.offsetTop = nextTop;
+      scrollbox.scrollTop = nextTop;
     }
+  };
+
+  const scrollSelectedChildIntoView = (): void => {
+    if (!listFocusModeActive()) return;
+    scrollChildIntoView(selectedChildID());
   };
 
   const moveSelection = (delta: number): void => {
@@ -1165,6 +1380,7 @@ function SidebarSubagents(props: {
       ),
     );
     setSelectedChildID(ids[nextIndex]);
+    scrollChildIntoView(ids[nextIndex]);
   };
 
   const rowActivations = new Map<string, () => void>();
@@ -1194,9 +1410,14 @@ function SidebarSubagents(props: {
     navigateToSessionTarget(props.api, selectedTargetSessionID());
   };
 
+  const toggleCompletedHistory = (): void => {
+    completedHistoryRegistration.toggleCompletedHistory();
+  };
+
   createEffect(() => {
     selectedChildID();
     listHeight();
+    if (!listFocused()) return;
     scrollSelectedChildIntoView();
   });
 
@@ -1215,6 +1436,8 @@ function SidebarSubagents(props: {
       if (props.expanded()) props.onSetExpanded(false);
     } else if (name === "l" || name === "right" || name === "arrowright") {
       if (!props.expanded()) props.onSetExpanded(true);
+    } else if (name === "c") {
+      toggleCompletedHistory();
     } else if (name === "escape" || name === "esc") {
       focusRegistration.blurList();
       props.onReturnFocus();
@@ -1228,6 +1451,26 @@ function SidebarSubagents(props: {
 
   useKeyboard(handleListKeyDown);
 
+  const restorePreservedScroll = (): void => {
+    if (!scrollbox) return;
+    if (scrollRegistration.restoreFramesRemaining <= 0) return;
+    scrollRegistration.restoreFramesRemaining -= 1;
+
+    const top = preservedSidebarScrollTop({
+      expanded: props.expanded(),
+      offsetTop: scrollRegistration.offsetTop,
+      anchor: scrollRegistration.anchor,
+      rows: scrollRegistration.getRows(),
+      leadingHeight: scrollRegistration.getLeadingHeight(),
+      scrollTop: scrollbox.scrollTop,
+      scrollHeight: scrollbox.scrollHeight,
+      viewportHeight: scrollbox.viewport.height,
+    });
+    if (top === undefined) return;
+    scrollRegistration.offsetTop = top;
+    scrollbox.scrollTop = top;
+  };
+
   createEffect(() => {
     props.expanded();
     visibleChildIDs().join("|");
@@ -1235,14 +1478,7 @@ function SidebarSubagents(props: {
     showingOtherSessions();
     props.sidebarWidth?.();
 
-    if (restoreScrollTimeout) clearTimeout(restoreScrollTimeout);
-    restoreScrollTimeout = setTimeout(() => {
-      if (!props.expanded() || !scrollbox) return;
-      const top = clampedScrollTop(scrollbox, scrollRegistration.offsetTop);
-      if (top > 0 && scrollbox.scrollTop !== top) {
-        scrollbox.scrollTop = top;
-      }
-    }, 0);
+    restorePreservedScroll();
   });
 
   const ChildRow = (rowProps: { childID: string }) => {
@@ -1273,7 +1509,6 @@ function SidebarSubagents(props: {
     const rowOpacity = createMemo(() =>
       status() === "running" ? 1 : INACTIVE_SUBAGENT_OPACITY,
     );
-    const markerWidth = 4;
     const line = createMemo(() => {
       const currentChild = child();
       if (!currentChild) {
@@ -1283,7 +1518,7 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
       });
     });
     const terminalLine = createMemo(() => {
@@ -1293,15 +1528,18 @@ function SidebarSubagents(props: {
         child: currentChild,
         nowMs: props.nowMs(),
         sidebarWidth: props.sidebarWidth?.(),
-        reservedWidth: markerWidth,
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
       });
     });
-    const hasSecondaryLine = createMemo(() => Boolean(line().secondaryLine));
     const rowHeight = createMemo(() => {
-      if (status() !== "running") return SUBAGENTS_TERMINAL_ROW_HEIGHT;
-      return hasSecondaryLine()
-        ? SUBAGENTS_RUNNING_ROW_HEIGHT
-        : SUBAGENTS_RUNNING_ROW_HEIGHT - 1;
+      const currentChild = child();
+      if (!currentChild) return SUBAGENTS_TERMINAL_ROW_HEIGHT;
+      return subagentRowHeight({
+        child: currentChild,
+        nowMs: props.nowMs(),
+        sidebarWidth: props.sidebarWidth?.(),
+        reservedWidth: SUBAGENTS_ROW_MARKER_WIDTH,
+      });
     });
     const activate = () => {
       const target = targetSessionID();
@@ -1435,7 +1673,12 @@ function SidebarSubagents(props: {
       <text fg={props.theme.textMuted}> · </text>
       <text fg={props.theme.error}>{`✕ ${counts().error} err`}</text>
       <text fg={props.theme.textMuted}> · </text>
-      <text fg={props.theme.text}>{`Σ ${totalExecuted()}`}</text>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI text supports mouse targets. */}
+      <text
+        fg={showCompletedHistory() ? props.theme.accent : props.theme.text}
+        selectable={false}
+        onMouseDown={toggleCompletedHistory}
+      >{`Σ ${totalExecuted()}`}</text>
     </box>
   );
 
@@ -1449,7 +1692,10 @@ function SidebarSubagents(props: {
       backgroundColor={listFocused() ? props.theme.backgroundPanel : undefined}
       focusable
       focused={listFocused()}
-      renderBefore={refreshListFocused}
+      renderBefore={() => {
+        refreshListFocused();
+        restorePreservedScroll();
+      }}
     >
       <box flexDirection="row">
         <text
@@ -1474,6 +1720,7 @@ function SidebarSubagents(props: {
         <scrollbox
           ref={(element) => {
             scrollbox = element;
+            restorePreservedScroll();
           }}
           height={listHeight()}
           scrollY
@@ -1497,18 +1744,11 @@ function HomeBottomStatus(props: {
   state: () => StatuslineState;
   theme: TuiThemeCurrent;
 }) {
-  const counts = createMemo(() => {
-    const result = { running: 0, done: 0, error: 0 };
-    for (const child of visibleSubagentWorkItems(
-      Object.values(props.state().children),
-    )) {
-      if (child.status === "running") result.running += 1;
-      if (child.status === "done") result.done += 1;
-      if (child.status === "error") result.error += 1;
-    }
-    return result;
-  });
-  const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
+  const snapshot = createMemo(() =>
+    resolveTuiSubagentSnapshot({ state: props.state() }),
+  );
+  const counts = createMemo(() => snapshot().visibleCounts);
+  const totalExecuted = createMemo(() => snapshot().totalExecuted);
   const visible = createMemo(
     () => counts().running > 0 || counts().error > 0 || totalExecuted() > 0,
   );
@@ -1530,7 +1770,7 @@ function HomeBottomStatus(props: {
   );
 }
 
-async function hydratePreviousSubagents(
+export async function hydratePreviousSubagents(
   api: TuiPluginApi,
   currentSessionID: string,
   statePath: string,
@@ -1544,6 +1784,7 @@ async function hydratePreviousSubagents(
     const sessionClient = api.client.session;
     let topLevelHydrationFailed = false;
     let statusHydrationFailed = false;
+    let parentMessageHydrationFailed = false;
 
     const [childrenResp, messagesResp, statusResp] = await Promise.all([
       (async () => {
@@ -1565,7 +1806,10 @@ async function hydratePreviousSubagents(
               directory,
             }) ?? Promise.resolve({ data: [] }),
         );
-        if (!response) topLevelHydrationFailed = true;
+        if (!response) {
+          topLevelHydrationFailed = true;
+          parentMessageHydrationFailed = true;
+        }
         return response;
       })(),
       (async () => {
@@ -1585,8 +1829,12 @@ async function hydratePreviousSubagents(
     const children = Array.isArray(childrenResp?.data) ? childrenResp.data : [];
     const messages = Array.isArray(messagesResp?.data) ? messagesResp.data : [];
     const allStatuses = asRecord(statusResp?.data) ?? {};
+    const parentTaskEvidenceByChildID =
+      collectParentTaskEvidenceByChildSessionID(messages, currentSessionID);
     let childHydrationFailed = false;
-    const childMessageResults = await Promise.all(
+    const childMessageResults: Array<
+      SessionMessageSummary & { childID?: string; fetchFailed: boolean }
+    > = await Promise.all(
       children.map(async (child) => {
         const session = asRecord(child);
         const childID =
@@ -1634,18 +1882,16 @@ async function hydratePreviousSubagents(
       for (const rawSession of children) {
         const session = asRecord(rawSession);
         if (!session || typeof session.id !== "string") continue;
-        const fakeEvent = {
-          type: "session.created",
-          properties: {
-            sessionID: session.id,
-            info: session,
-          },
-        };
-        if (applySubagentEvent(next, fakeEvent)) changed = true;
-
         const status = allStatuses[session.id];
         const sessionStatus = deriveSessionChildStatus(status);
         const childSummary = childMessageSummaryByID.get(session.id);
+        const hasHydrationEvidence = shouldHydrateSessionChild({
+          childID: session.id,
+          sessionStatus,
+          childSummary,
+          parentTaskEvidenceByChildID,
+        });
+        const parentTaskEvidence = parentTaskEvidenceByChildID.get(session.id);
         const explicitCompletionEvidence =
           !!childSummary &&
           !childSummary.fetchFailed &&
@@ -1657,9 +1903,53 @@ async function hydratePreviousSubagents(
           fallbackEndedAt ??
           sessionTimestamp(session, "completed") ??
           sessionTimestamp(session, "updated");
+        const shouldHydrateChildFromSession = hasHydrationEvidence;
 
-        if (sessionStatus === "done" || sessionStatus === "error") {
-          if (markChildStatus(next, session.id, sessionStatus, statusEndedAt))
+        if (!shouldHydrateChildFromSession) {
+          const existing = next.children[session.id];
+          if (
+            !statusHydrationFailed &&
+            !parentMessageHydrationFailed &&
+            !!childSummary &&
+            !childSummary.fetchFailed &&
+            existing?.parentID === currentSessionID &&
+            existing.source === "session" &&
+            existing.status === "running"
+          ) {
+            delete next.children[session.id];
+            changed = true;
+          }
+          continue;
+        }
+
+        const fakeEvent = {
+          type: "session.created",
+          properties: {
+            sessionID: session.id,
+            info: session,
+          },
+        };
+        if (applySubagentEvent(next, fakeEvent)) changed = true;
+
+        const resolvedStatus = resolveSessionStatusWithMessageSummary({
+          status: sessionStatus ?? parentTaskEvidence?.status,
+          summary: childSummary,
+        });
+
+        if (
+          resolvedStatus.status === "done" ||
+          resolvedStatus.status === "error"
+        ) {
+          if (
+            markChildStatus(
+              next,
+              session.id,
+              resolvedStatus.status,
+              resolvedStatus.endedAt ??
+                parentTaskEvidence?.endedAt ??
+                statusEndedAt,
+            )
+          )
             changed = true;
           continue;
         }
@@ -1746,6 +2036,71 @@ async function hydratePreviousSubagents(
     });
     return false;
   }
+}
+
+function shouldHydrateSessionChild(input: {
+  childID: string;
+  sessionStatus?: ChildSessionState["status"];
+  childSummary?: SessionMessageSummary;
+  parentTaskEvidenceByChildID: ReadonlyMap<string, ParentTaskEvidence>;
+}): boolean {
+  if (input.sessionStatus) return true;
+  if (input.parentTaskEvidenceByChildID.has(input.childID)) return true;
+
+  const summary = input.childSummary;
+  if (!summary || summary.fetchFailed) return false;
+
+  return (
+    summary.hasError === true ||
+    typeof summary.completedAt === "string" ||
+    typeof summary.evidenceAt === "string" ||
+    typeof summary.latestAssistantActivityAt === "string" ||
+    typeof summary.latestMessageActivityAt === "string"
+  );
+}
+
+type ParentTaskEvidence = {
+  status: ChildSessionState["status"];
+  endedAt?: string;
+};
+
+function collectParentTaskEvidenceByChildSessionID(
+  messages: unknown[],
+  parentSessionID: string,
+): Map<string, ParentTaskEvidence> {
+  const evidenceByID = new Map<string, ParentTaskEvidence>();
+  for (const rawMessage of messages) {
+    const message = asRecord(rawMessage);
+    const info = asRecord(message?.info);
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    for (const rawPart of parts) {
+      const part = asRecord(rawPart);
+      if (!part || part.type !== "tool" || part.tool !== "task") continue;
+      const state = asRecord(part.state);
+      const metadata = asRecord(state?.metadata);
+      const childID =
+        typeof metadata?.sessionId === "string"
+          ? metadata.sessionId
+          : undefined;
+      if (!childID || childID === parentSessionID) continue;
+
+      const taskEvidence = extractTaskToolEvidence({
+        type: "message.part.updated",
+        properties: {
+          sessionID: parentSessionID,
+          info: {
+            time: info?.time,
+          },
+          part: rawPart,
+        },
+      });
+      evidenceByID.set(childID, {
+        status: taskEvidence?.status ?? "running",
+        endedAt: taskEvidence?.endedAt,
+      });
+    }
+  }
+  return evidenceByID;
 }
 
 async function safeReadAsync<Value>(
@@ -1893,7 +2248,7 @@ function selectRunningReconcileCandidates(input: {
   return capCandidates(selected, input.maxCandidates);
 }
 
-async function probeRunningEvidence(input: {
+export async function probeRunningEvidence(input: {
   api: TuiPluginApi;
   targetSessionID: string;
   directory: string;
@@ -1907,12 +2262,15 @@ async function probeRunningEvidence(input: {
   );
   if (directStatus === undefined) probeFailed = true;
   const statusFromState = deriveSessionChildStatus(directStatus);
-  if (statusFromState === "done" || statusFromState === "error") {
+  if (statusFromState === "error") {
     return { status: statusFromState, endedAt: new Date().toISOString() };
   }
   if (statusFromState === "running") {
     return { status: "running", sawRunningEvidence: true };
   }
+
+  const doneFromState = statusFromState === "done";
+  let doneFromClient = false;
 
   const statusResp = await safeReadAsync(() =>
     input.api.client.session.status({ directory: input.directory }),
@@ -1922,14 +2280,20 @@ async function probeRunningEvidence(input: {
   const statusFromClient = deriveSessionChildStatus(
     statuses?.[input.targetSessionID],
   );
-  if (statusFromClient === "done" || statusFromClient === "error") {
+  if (statusFromClient === "error") {
     return { status: statusFromClient, endedAt: new Date().toISOString() };
   }
   if (statusFromClient === "running") {
     return { status: "running", sawRunningEvidence: true };
   }
+  doneFromClient = statusFromClient === "done";
 
-  if (input.candidateAgeMs < RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS) {
+  const hasDoneStatus = doneFromState || doneFromClient;
+
+  if (
+    !hasDoneStatus &&
+    input.candidateAgeMs < RUNNING_RECONCILE_MESSAGE_AGE_GATE_MS
+  ) {
     return { probeFailed, canApplyStaleFallback: false };
   }
 
@@ -1940,6 +2304,15 @@ async function probeRunningEvidence(input: {
     }),
   );
   if (messagesResp === undefined || !Array.isArray(messagesResp?.data)) {
+    if (hasDoneStatus) {
+      return {
+        status: "done",
+        endedAt: new Date().toISOString(),
+        checkedMessages: false,
+        probeFailed: true,
+        canApplyStaleFallback: false,
+      };
+    }
     return {
       checkedMessages: false,
       probeFailed: true,
@@ -1948,20 +2321,24 @@ async function probeRunningEvidence(input: {
   }
   const messages = Array.isArray(messagesResp?.data) ? messagesResp.data : [];
   const summary = summarizeSessionMessages(messages);
+  const resolvedStatus = resolveSessionStatusWithMessageSummary({
+    status: hasDoneStatus ? "done" : undefined,
+    summary,
+  });
 
-  if (summary.hasError) {
+  if (resolvedStatus.status === "error") {
     return {
       status: "error",
-      endedAt: summary.evidenceAt,
+      endedAt: resolvedStatus.endedAt,
       checkedMessages: true,
       canApplyStaleFallback: false,
     };
   }
 
-  if (typeof summary.completedAt === "string") {
+  if (resolvedStatus.status === "done") {
     return {
       status: "done",
-      endedAt: summary.completedAt,
+      endedAt: resolvedStatus.endedAt ?? new Date().toISOString(),
       checkedMessages: true,
       canApplyStaleFallback: false,
     };
@@ -2097,11 +2474,23 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     }, 0);
   };
 
+  const toggleSidebarCompletedHistory = (): void => {
+    api.ui.dialog.clear();
+    setSubagentsSectionEnabled(true);
+    setSubagentsExpanded(true);
+    api.kv.set(SUBAGENTS_SECTION_ENABLED_KV_KEY, true);
+    api.kv.set(SUBAGENTS_EXPANDED_KV_KEY, true);
+    setTimeout(() => {
+      toggleVisibleSidebarCompletedHistory();
+    }, 0);
+  };
+
   const commandDispose = registerSubagentCommands({
     api,
     sectionEnabled: subagentsSectionEnabled,
     toggleSection: setSubagentsSectionEnabledPreference,
     focusSidebarList: toggleSidebarListFocus,
+    toggleCompletedHistory: toggleSidebarCompletedHistory,
   });
 
   const clearHydrateRetryTimeout = (sessionID: string): void => {
@@ -2156,9 +2545,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
     if (!routeSessionID) return;
 
     const sessionID = routeSessionID;
-    const currentAttempts = hydrateRetryAttempts().get(sessionID) ?? 0;
     if (
-      currentAttempts >= HYDRATE_RETRY_MAX_ATTEMPTS ||
       hydratedSessions().has(sessionID) ||
       hydratingSessions().has(sessionID) ||
       hydrateRetryPendingSessions().has(sessionID)
@@ -2205,17 +2592,6 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
       }
 
       const attempts = hydrateRetryAttempts().get(sessionID) ?? 0;
-      if (attempts >= HYDRATE_RETRY_MAX_ATTEMPTS) {
-        setHydrateRetryPendingSessions((prev) => {
-          if (!prev.has(sessionID)) return prev;
-          const next = new Set(prev);
-          next.delete(sessionID);
-          return next;
-        });
-        clearHydrateRetryTimeout(sessionID);
-        finishHydrating();
-        return;
-      }
 
       const delayMs = Math.min(
         HYDRATE_RETRY_MAX_DELAY_MS,
@@ -2224,7 +2600,7 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
 
       setHydrateRetryAttempts((prev) => {
         const next = new Map(prev);
-        next.set(sessionID, attempts + 1);
+        next.set(sessionID, Math.min(attempts + 1, HYDRATE_RETRY_MAX_ATTEMPTS));
         return next;
       });
 
