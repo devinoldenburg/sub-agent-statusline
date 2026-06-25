@@ -2,8 +2,8 @@
 
 ## Verification Report
 
-**Change**: fix-subagent-history-count  
-**Version**: N/A  
+**Change**: fix-subagent-history-count
+**Version**: N/A
 **Mode**: Standard verification for this SDD cycle; Strict TDD config drift remains (`openspec/config.yaml` has `testing.strict_tdd: true` and `sdd.strict_tdd: true`, while the launch instruction says this verification cycle is Standard Mode).
 
 ### Completeness

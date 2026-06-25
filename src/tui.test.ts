@@ -9,6 +9,7 @@ import {
   hydratePreviousSubagents,
   preservedSidebarAnchorScrollTop,
   preservedSidebarScrollTop,
+  resolveSidebarSubagentSnapshot,
   probeRunningEvidence,
   resolveTuiSubagentSnapshot,
   subagentRowHeight,
@@ -425,6 +426,48 @@ describe("TUI subagent snapshots", () => {
       error: 0,
     });
     expect(defaultSnapshot.totalExecuted).toBe(2);
+  });
+
+  it("uses other session fallback through the sidebar snapshot wrapper", () => {
+    const nowMs = Date.parse("2026-04-30T10:20:00.000Z");
+    const state = stateWith([
+      child({
+        id: "tool_current_wrapper",
+        title: "Current wrapper only",
+        source: "tool",
+        parentID: "ses_current",
+        targetSessionID: undefined,
+        messageID: "msg_current_wrapper",
+        status: "done",
+        color: "green",
+        endedAt: "2026-04-30T10:19:00.000Z",
+        updatedAt: "2026-04-30T10:19:00.000Z",
+      }),
+      child({
+        id: "ses_other_running",
+        title: "Other session running",
+        source: "session",
+        parentID: "ses_other",
+        targetSessionID: "ses_other_running",
+        messageID: "msg_other_running",
+        status: "running",
+        startedAt: "2026-04-30T10:10:00.000Z",
+        updatedAt: "2026-04-30T10:10:00.000Z",
+      }),
+    ]);
+
+    const snapshot = resolveSidebarSubagentSnapshot({
+      state,
+      sessionID: "ses_current",
+      nowMs,
+    });
+
+    expect(snapshot.showingOtherSessions).toBe(true);
+    expect(snapshot.visibleChildren.map((item) => item.id)).toEqual([
+      "ses_other_running",
+    ]);
+    expect(snapshot.visibleCounts).toEqual({ running: 1, done: 0, error: 0 });
+    expect(snapshot.totalExecuted).toBe(1);
   });
 
   it("resolves sidebar and home snapshots from classified real executions only", () => {

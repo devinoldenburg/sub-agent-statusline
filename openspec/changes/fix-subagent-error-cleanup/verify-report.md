@@ -2,12 +2,12 @@
 
 ## Verification Report
 
-**Change**: fix-subagent-error-cleanup  
-**Project**: sub-agent-statusline  
-**Mode**: Strict TDD verification (`STRICT TDD MODE IS ACTIVE`; OpenSpec artifact store)  
-**Verifier**: sdd-verify executor  
-**Scope**: Final pre-commit scope fallback correction for `resolveTuiSubagentSnapshot()`  
-**Verdict**: PASS  
+**Change**: fix-subagent-error-cleanup
+**Project**: sub-agent-statusline
+**Mode**: Strict TDD verification (`STRICT TDD MODE IS ACTIVE`; OpenSpec artifact store)
+**Verifier**: sdd-verify executor
+**Scope**: Final pre-commit scope fallback correction for `resolveTuiSubagentSnapshot()`
+**Verdict**: PASS
 **Archive Readiness**: Ready
 
 ## Completeness
@@ -131,9 +131,9 @@ Audit notes:
 
 ## Quality Metrics
 
-**Linter**: ➖ Unavailable per `openspec/config.yaml`  
-**Type Checker**: ✅ No errors (`pnpm typecheck`)  
-**Build**: ✅ Successful (`pnpm build`)  
+**Linter**: ➖ Unavailable per `openspec/config.yaml`
+**Type Checker**: ✅ No errors (`pnpm typecheck`)
+**Build**: ✅ Successful (`pnpm build`)
 **Diff hygiene**: ✅ `git diff --check` clean
 
 ## Issues

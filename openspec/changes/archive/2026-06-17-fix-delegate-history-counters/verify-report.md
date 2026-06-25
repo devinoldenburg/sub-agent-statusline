@@ -2,9 +2,9 @@
 
 ## Verification Report
 
-**Change**: fix-delegate-history-counters  
-**Version**: N/A  
-**Mode**: Strict TDD verification (`STRICT TDD MODE IS ACTIVE`; runner `pnpm test`)  
+**Change**: fix-delegate-history-counters
+**Version**: N/A
+**Mode**: Strict TDD verification (`STRICT TDD MODE IS ACTIVE`; runner `pnpm test`)
 **Skill Resolution**: paths-injected
 
 ### Completeness
@@ -118,8 +118,8 @@ git diff --check
 
 ### Quality Metrics
 
-**Linter**: ➖ Not available (`openspec/config.yaml` marks linter unavailable)  
-**Type Checker**: ✅ No errors (`pnpm typecheck`)  
+**Linter**: ➖ Not available (`openspec/config.yaml` marks linter unavailable)
+**Type Checker**: ✅ No errors (`pnpm typecheck`)
 **Diff Whitespace**: ✅ No errors (`git diff --check`)
 
 ### Spec Compliance Matrix

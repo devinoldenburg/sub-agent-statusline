@@ -1112,6 +1112,18 @@ export function resolveTuiSubagentSnapshot(input: {
   };
 }
 
+export function resolveSidebarSubagentSnapshot(input: {
+  state: StatuslineState;
+  sessionID: string;
+  nowMs?: number;
+  showCompletedHistory?: boolean;
+}): TuiSubagentSnapshot {
+  return resolveTuiSubagentSnapshot({
+    ...input,
+    fallbackToOtherSessions: true,
+  });
+}
+
 function SidebarSubagents(props: {
   api: TuiPluginApi;
   sessionID: string;
@@ -1135,7 +1147,7 @@ function SidebarSubagents(props: {
     showCompletedHistory: showCompletedHistory(),
   });
   const snapshot = createMemo(() =>
-    resolveTuiSubagentSnapshot({
+    resolveSidebarSubagentSnapshot({
       state: props.state(),
       sessionID: props.sessionID,
       nowMs: props.nowMs(),
@@ -1351,6 +1363,7 @@ function SidebarSubagents(props: {
   };
 
   const scrollSelectedChildIntoView = (): void => {
+    if (!listFocusModeActive()) return;
     scrollChildIntoView(selectedChildID());
   };
 
