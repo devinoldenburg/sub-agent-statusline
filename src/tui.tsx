@@ -162,7 +162,6 @@ function snapshotSidebarScrollOffsets(): void {
 }
 
 type SidebarContentContext = TuiSlotContext & { session_id?: string };
-type HomeBottomContext = TuiSlotContext;
 type PromptRefProp =
   | ((ref: TuiPromptRef | undefined) => void)
   | { current?: TuiPromptRef | undefined }
@@ -1492,37 +1491,6 @@ function SidebarSubagents(props: {
   );
 }
 
-function HomeBottomStatus(props: {
-  state: () => StatuslineState;
-  theme: TuiThemeCurrent;
-}) {
-  const symbols = currentSymbols();
-  const counts = createMemo(() =>
-    // Aggregate counts come straight from state, independent of row display.
-    aggregateWorkItemCounts(Object.values(props.state().children)),
-  );
-  const totalExecuted = createMemo(() => props.state().totalExecuted ?? 0);
-  const visible = createMemo(
-    () => counts().running > 0 || counts().error > 0 || totalExecuted() > 0,
-  );
-
-  return (
-    <Show when={visible()}>
-      <box paddingLeft={1} paddingRight={1}>
-        <box flexDirection="row">
-          <text fg={props.theme.warning}>{`${symbols.running} ${counts().running}`}</text>
-          <text fg={props.theme.textMuted}>{symbols.separator}</text>
-          <text fg={props.theme.success}>{`${symbols.done} ${counts().done}`}</text>
-          <text fg={props.theme.textMuted}>{symbols.separator}</text>
-          <text fg={props.theme.error}>{`${symbols.error} ${counts().error}`}</text>
-          <text fg={props.theme.textMuted}>{symbols.separator}</text>
-          <text fg={props.theme.text}>{`${symbols.total} ${totalExecuted()}`}</text>
-        </box>
-      </box>
-    </Show>
-  );
-}
-
 async function hydratePreviousSubagents(
   api: TuiPluginApi,
   currentSessionID: string,
@@ -2599,9 +2567,6 @@ function initializeTui(api: TuiPluginApi, disposeRoot: () => void): void {
             />
           </Show>
         );
-      },
-      home_bottom(ctx: HomeBottomContext) {
-        return <HomeBottomStatus state={state} theme={ctx.theme.current} />;
       },
       home_prompt(_ctx: TuiSlotContext, props: HomePromptProps) {
         const { workspace_id: _workspaceID, ...restProps } = props;

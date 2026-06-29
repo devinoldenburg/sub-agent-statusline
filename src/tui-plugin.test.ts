@@ -150,7 +150,6 @@ describe("TUI plugin contract", () => {
     expect(registeredSlots[0]?.slots).toEqual(
       expect.objectContaining({
         sidebar_content: expect.any(Function),
-        home_bottom: expect.any(Function),
         home_prompt: expect.any(Function),
         session_prompt: expect.any(Function),
       }),
@@ -210,6 +209,15 @@ describe("TUI plugin contract", () => {
     await expect(plugin.tui(api as never, undefined, {} as never)).resolves.toBeUndefined();
     expect(api.slots.register).toHaveBeenCalledOnce();
     expect(api.event.on).toHaveBeenCalledTimes(7);
+  });
+
+  it("does not register a home-bottom status slot", async () => {
+    const { default: plugin } = await import("./tui.js");
+    const { api, registeredSlots } = createMockApi();
+    await plugin.tui(api as never, undefined, {} as never);
+    const slots = registeredSlots[0]?.slots as Record<string, unknown>;
+
+    expect(slots.home_bottom).toBeUndefined();
   });
 
   it("renders sidebar aggregate counts with symbols instead of text badges", async () => {

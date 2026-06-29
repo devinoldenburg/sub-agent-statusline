@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the home/start-page aggregate status line (`run`, `ok`, `err`, `total`). Subagent counts now appear only in the OpenCode sidebar subagents section.
+
 ## 0.9.3 - 2026-06-20
 
 - Aligned the subagents sidebar section header with native OpenCode TUI sidebar sections: bold title, optional expand chevrons when more than two rows are visible, and no plugin version label in the sidebar.

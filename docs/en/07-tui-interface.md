@@ -8,16 +8,19 @@ The plugin registers several TUI surfaces:
 
 | Surface | Use |
 | --- | --- |
-| `sidebar_content` | Main subagent list. |
-| `home_bottom` | Compact home-screen summary. |
+| `sidebar_content` | Main subagent list and aggregate counts. |
 | `home_prompt` | Prompt wrapper for focus preservation. |
 | `session_prompt` | Session prompt wrapper. |
 
-Users mainly interact with `sidebar_content` and `home_bottom`.
+Users mainly interact with `sidebar_content`.
 
 ## Subagent sidebar
 
-The sidebar shows a compact list of subagent-related work items.
+The sidebar shows a compact list of subagent-related work items and an aggregate status line:
+
+```txt
+> 1 | + 0 | ! 0 | # 2
+```
 
 It can include:
 
@@ -53,16 +56,6 @@ If there are no current-session subagents, or if relevant activity exists elsewh
 | `error` | Failed work. Listed below the running rows. |
 
 All of a session's subagents stay listed, with running work pinned at the top (newest first) and finished work below it. Terminal rows are only removed by state pruning, not by the renderer.
-
-## Home summary
-
-When relevant activity exists, the plugin can show a compact home summary:
-
-```txt
--> 1 running | 1 done | 0 error | 2 total
-```
-
-This gives a quick signal without opening the sidebar.
 
 ## List focus
 
