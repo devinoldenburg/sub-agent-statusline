@@ -8,16 +8,19 @@ El plugin registra varias superficies TUI:
 
 | Superficie        | Uso                                        |
 | ----------------- | ------------------------------------------ |
-| `sidebar_content` | Lista principal de subagentes.             |
-| `home_bottom`     | Resumen compacto en la pantalla de inicio. |
+| `sidebar_content` | Lista principal de subagentes y resumen.   |
 | `home_prompt`     | Wrapper del prompt para conservar foco.    |
 | `session_prompt`  | Wrapper del prompt dentro de sesiones.     |
 
-La parte visible para usuarios está principalmente en `sidebar_content` y `home_bottom`.
+La parte visible para usuarios está principalmente en `sidebar_content`.
 
 ## Sidebar de subagentes
 
-La sidebar muestra una lista compacta de work items relacionados con subagentes.
+La sidebar muestra una lista compacta de work items relacionados con subagentes y una línea de resumen agregado:
+
+```txt
+> 1 | + 0 | ! 0 | # 2
+```
 
 Puede incluir:
 
@@ -58,18 +61,6 @@ Esto ayuda en dos casos:
 | `error`        | Trabajo fallido. Se lista debajo de las filas en ejecución.       |
 
 Todos los subagentes de la sesión siguen listados: el trabajo en ejecución queda fijado arriba (los más nuevos primero) y el trabajo terminado debajo. Las filas terminadas solo se quitan por el pruning del estado, no por el render.
-
-## Resumen en home
-
-Cuando hay actividad relevante, el plugin puede mostrar un resumen compacto en la parte inferior de home.
-
-Ejemplo:
-
-```txt
--> 1 running | 1 done | 0 error | 2 total
-```
-
-Este resumen sirve para saber rápidamente si hay subagentes activos sin abrir la sidebar.
 
 ## Foco de la lista
 

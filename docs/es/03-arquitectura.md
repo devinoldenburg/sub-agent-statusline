@@ -196,7 +196,6 @@ Crea estado en memoria, registra comandos, prepara slots y configura listeners d
 Registra contenido para:
 
 - `sidebar_content`;
-- `home_bottom`;
 - `home_prompt`;
 - `session_prompt`.
 
